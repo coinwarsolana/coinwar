@@ -1,7 +1,7 @@
 use solana_program::pubkey::Pubkey;
 use anchor_lang::{prelude::*, solana_program};
-// use anchor_spl::token::{TokenAccount, Transfer, Token, Mint};
-// use anchor_spl::token;
+use anchor_spl::token::{TokenAccount, Transfer, Token, Mint};
+use anchor_spl::token;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
@@ -77,21 +77,34 @@ pub struct EndGame<'info> {
 #[instruction(amount: f64)]
 pub struct Withdraw<'info> {
     #[account(mut)]
-    pub pool: Account<'info, Pool>,
+    pub initializer: Signer<'info>,
     #[account(mut)]
     pub user: Account<'info, User>,
+    #[account(mut)]
+    pub pool: Account<'info, Pool>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 #[instruction(amount: f64)]
 pub struct Deposit<'info> {
     #[account(mut)]
-    pub pool: Account<'info, Pool>,
-    #[account(mut)]
+    pub initializer: Signer<'info>,
+    #[account(init, payer = initializer, space = User::LEN)]
     pub user: Account<'info, User>,
+    #[account(mut)]
+    pub pool: Account<'info, Pool>,
+    #[account(
+        init, 
+        payer = initializer, 
+        space = Transaction::LEN, 
+        seeds = ["Tx".as_ref(), user.key().as_ref(), pool.key().as_ref(), &user.txn_count.to_be_bytes()] 
+        , bump)]
+    pub transaction: Account<'info, Transaction>,
+    pub system_program: Program<'info, System>,
 }
 
-const OWNER: Pubkey = static_pubkey::static_pubkey!("jakcakcb"); // public key of the program wallet
+const OWNER: Pubkey = static_pubkey::static_pubkey!("jakcasdfasfaskcb"); // public key of the program wallet
 #[derive(Accounts)]
 #[instruction(pool_name: String)]
 pub struct CreatePool<'info> {
@@ -117,7 +130,7 @@ enum Pools {
 #[account]
 pub struct Pool {
     pub isInitialized: bool,
-    pub lastUpdateTimestamp: u64,
+    pub lastUpdateTimestamp: i64,
     pub totalDeposit: f64,
     pub totalPrize: f64,
     pub user_count: u64,
@@ -157,10 +170,11 @@ pub struct GameHistory {
 pub struct User {
     pub balance: f64,
     // used to read UserGameHistory
+    pub lastActive: i64,
     pub game_history_count: u64,
     // needs to be reset to balance at the start of each game
     pub current_average_balance: f64,
-    pub transaction: Vec<Transaction>,
+    pub txn_count: u64,
     pub pool: String,
 }
 
@@ -170,10 +184,20 @@ const TIMESTAMP: usize = 8;
 const AMOUNT: usize = 8;
 const COUNT: usize = 8;
 const STRING_PREFIX: usize = 4; // Stores the size of the string
+const POOL: usize = 20 * 4; // 20 chars max.
 const U64: usize = 32;
 
-// TODO: Calculate space for User Account
-// TODO: Calculate space for Transaction Account
+// Calculate space for User Account
+impl User {
+    const LEN: usize = DISCRIMINATOR
+        + AMOUNT
+        + TIMESTAMP 
+        + COUNT
+        + AMOUNT
+        + AMOUNT
+        + STRING_PREFIX + POOL;
+}
+// Calculate space for Transaction Account
 impl Transaction {
     const LEN: usize = DISCRIMINATOR
         + AMOUNT
@@ -182,7 +206,7 @@ impl Transaction {
 }
 // TODO: Calculate space for UserGameHistory Account
 // TODO: Calculate space for GameHistory Account
-// TODO: Calculate space for Pool Account
+// Calculate space for Pool Account
 impl Pool {
     const LEN: usize = DISCRIMINATOR
         + AMOUNT
@@ -191,8 +215,6 @@ impl Pool {
         + AMOUNT
         + COUNT;
 }
-
-
 
 #[error_code]
 pub enum ErrorCode {
