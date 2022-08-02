@@ -22,7 +22,7 @@ pub mod coin_war {
     pub fn createPool(ctx: Context<CreatePool>, pool_name: String) -> Result<()> {
         require!(ctx.accounts.pool.isInitialized == false, ErrorCode::PoolAlreadyCreated);
         ctx.accounts.pool.isInitialized = true;
-
+        
         Ok(())
     }
 
@@ -76,7 +76,9 @@ pub struct EndGame<'info> {
 #[derive(Accounts)]
 #[instruction(amount: f64)]
 pub struct Withdraw<'info> {
+    #[account(mut)]
     pub pool: Account<'info, Pool>,
+    #[account(mut)]
     pub user: Account<'info, User>,
 }
 
@@ -95,7 +97,7 @@ const OWNER: Pubkey = static_pubkey::static_pubkey!("jakcakcb"); // public key o
 pub struct CreatePool<'info> {
     #[account(mut, constraint = owner.key() == OWNER)]
     pub owner: Signer<'info>,
-    #[account(init, payer = owner, space = 9000, seeds = [pool_name.as_ref()], bump)]
+    #[account(init, payer = owner, space = Pool::LEN, seeds = [pool_name.as_ref()], bump)]
     pub pool: Account<'info, Pool>,
     pub system_program: Program<'info, System>,
 }
@@ -132,7 +134,7 @@ pub struct Game {
 // PDA
 #[account]
 pub struct Transaction {
-    pub timestamp: u64,
+    pub timestamp: i64,
     pub amount: f64,
     pub transaction_type: u64,
 }
@@ -162,17 +164,33 @@ pub struct User {
     pub pool: String,
 }
 
-const DISCRIMINATOR_LENGTH: usize = 8;
-const PUBLIC_KEY_LENGTH: usize = 32;
-const TIMESTAMP_LENGTH: usize = 8;
-const STRING_LENGTH_PREFIX: usize = 4; // Stores the size of the string
+const DISCRIMINATOR: usize = 8;
+const PUBLIC_KEY: usize = 32;
+const TIMESTAMP: usize = 8;
+const AMOUNT: usize = 8;
+const COUNT: usize = 8;
+const STRING_PREFIX: usize = 4; // Stores the size of the string
 const U64: usize = 32;
 
 // TODO: Calculate space for User Account
 // TODO: Calculate space for Transaction Account
+impl Transaction {
+    const LEN: usize = DISCRIMINATOR
+        + AMOUNT
+        + TIMESTAMP 
+        + STRING_PREFIX;
+}
 // TODO: Calculate space for UserGameHistory Account
 // TODO: Calculate space for GameHistory Account
 // TODO: Calculate space for Pool Account
+impl Pool {
+    const LEN: usize = DISCRIMINATOR
+        + AMOUNT
+        + TIMESTAMP 
+        + AMOUNT
+        + AMOUNT
+        + COUNT;
+}
 
 
 
