@@ -71,7 +71,8 @@ pub mod coin_war {
     const GAME_DURATION_IN_SECS: i64 = GAME_DURATION_IN_DAYS * 24 * 60 * 60;
 
     // Create a pool. This needs to be called once for each of the pools defined in enum Pools.
-    pub fn create_pool(ctx: Context<CreatePool>, pool_name: String) -> Result<()> {
+    pub fn create_pool(ctx: Context<CreatePool>, pool_name: u8) -> Result<()> {
+        let pool_enum = Pools::from(pool_name)?;
         require!(ctx.accounts.pool.is_initialized == false, ErrorCode::PoolAlreadyCreated);
         let clock: Clock = Clock::get().unwrap();
         let pool = &mut ctx.accounts.pool;
@@ -80,7 +81,7 @@ pub mod coin_war {
         pool.total_deposit = 0.00;
         pool.total_prize = INITIAL_POOL_PRIZE; // should be a non-zero number for cold-start
         pool.user_count = 0;
-        pool.name = Pool::get_name(pool_name);
+        pool.name = pool_enum.to_code();
 
         Ok(())
     }
@@ -447,7 +448,7 @@ pub struct Pool {
     pub total_deposit: f64,
     pub total_prize: f64,
     pub user_count: u64,
-    pub name: String,
+    pub name: u8,
 }
 
 #[account]
@@ -476,7 +477,7 @@ pub struct UserGameHistory {
 #[account]
 pub struct GameHistory {
     pub game_id: u64,
-    pub winning_pool: String,
+    pub winning_pool: u8,
     pub winning: f64
 }
 
@@ -521,15 +522,6 @@ impl Transaction {
         + AMOUNT
         + TIMESTAMP 
         + STRING_PREFIX;
-
-    fn get_type(key: String) -> String {
-        let mut txn_types: HashMap<String, String> = HashMap::new();
-        txn_types.insert(String::from("deposit"), String::from("deposit"));
-        if txn_types.contains_key(&key) {
-            return key;
-        }
-        return "".to_string();
-    }
 }
 // TODO: Calculate space for UserGameHistory Account
 // TODO: Calculate space for GameHistory Account
@@ -542,18 +534,6 @@ impl Pool {
         + AMOUNT
         + AMOUNT
         + COUNT;
-
-    fn get_name(key: String) -> String {
-        let mut pool_names: HashMap<String, String> = HashMap::new();
-        pool_names.insert("ethereum".to_string(), "Ethereum".to_string());
-        pool_names.insert("bnb".to_string(), "BNB".to_string());
-        pool_names.insert("solana".to_string(), "Solana".to_string());
-        pool_names.insert("polygon".to_string(), "Polygon".to_string());
-        if pool_names.contains_key(&key) {
-            return key;
-        }
-        return "".to_string();
-    }
 }
 
 // Calculate space for Game Account
