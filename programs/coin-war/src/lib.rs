@@ -1,9 +1,14 @@
+use anchor_lang::solana_program::pubkey;
 use solana_program::pubkey::Pubkey;
 use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::token::{TokenAccount, Transfer, Token, Mint};
 use anchor_spl::token;
+use std::collections::HashMap;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+// TODO: Create pubkey for owner program and each of the four pool wallets
+const OWNER: Pubkey = pubkey!("adfadsfsdafssdfadsfdsaffdafssddyuoiwdafdsaf"); // TODO: this needs to be public key of the program wallet
+
 
 /* Game Logic - User deposits USDC into one of 4 pools. At the end of the week selection of a winning pool based on weighted 
  * pool size happens. All users in the winning pool gets returns generated from all the other pools. One lucky winner in the 
@@ -18,7 +23,7 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 pub mod coin_war {
     use super::*;
 
-    const INITIAL_POOL_PRIZE: f64 = 100.00;
+    const INITIAL_POOL_PRIZE: f64 = 100.00; 
 
     // Create a pool. This needs to be called once for each of the pools defined in enum Pools.
     pub fn createPool(ctx: Context<CreatePool>, pool_name: String) -> Result<()> {
@@ -66,22 +71,62 @@ pub mod coin_war {
     // Transfer from user wallet to pool wallet
     // Update user balance
     // Update pool balance
+    // Update pool count if needed
     // Update average balance for user
+    // Create new transaction
     // Only allowed to deposit in one pool
-    pub fn deposit(ctx: Context<Withdraw>) -> Result<()> {
-        Ok(())
-    }
+    // pub fn withdraw(ctx: Context<Withdraw>, amount: f64) -> Result<()> {
+
+    //     Ok(())
+    // }
 
     // Transfer from pool wallet to user wallet
     // Update user balance
     // Update pool balance
     // Zero out average balance?
-    pub fn withdraw(ctx: Context<Deposit>) -> Result<()> {
+    pub fn deposit(ctx: Context<Deposit>, amount: f64) -> Result<()> {
+        let clock: Clock = Clock::get().unwrap();
+
+        // Transfer amount from user wallet to pool wallet
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.initializer.clone(),
+            to: ctx.accounts.pool.clone(), // pool wallet
+            authority: ctx.accounts.initializer.to_account_info().clone(),
+        };
+        let cpi_context = CpiContext::new(
+            ctx.accounts.token_program.to_account_info().clone(), 
+            cpi_accounts);
+
+        token::transfer(cpi_context, amount as u64);
+
+        // Update user balance
+        let user = &mut ctx.accounts.user;
+        user.balance = user.balance + amount;
+
+        // TODO: Update average balance for user
+        let total_value = user.current_weighted_balance;
+        let days_left = 4; // TODO: days left should be number of days left until game is over
+        let added_value = days_left as f64 * amount;
+        user.current_average_balance = (total_value + added_value) / (days_left as f64 + user.current_weighted_days as f64);
+        user.current_weighted_balance = total_value + added_value;
+        user.current_weighted_days = days_left + user.current_weighted_days;
+
+        // Update pool balance
+        let pool = &mut ctx.accounts.pool;
+        pool.totalDeposit = pool.totalDeposit + amount;
+
+        // Update pool count if user not in pool
+
+
+        // Create new transaction
+        let transaction = &mut ctx.accounts.transaction;
+        transaction.amount = amount;
+        transaction.transaction_type = Transaction::getType("deposit".to_string());
+        transaction.timestamp = clock.unix_timestamp;
         Ok(())
     }
 }
 
-const OWNER: Pubkey = Pubkey::new_unique(); // TODO: this needs to be public key of the program wallet
 
 #[derive(Accounts)]
 pub struct StartGame<'info> {
@@ -133,6 +178,7 @@ pub struct Deposit<'info> {
         seeds = ["Tx".as_ref(), user.key().as_ref(), pool.key().as_ref(), &user.txn_count.to_be_bytes()] 
         , bump)]
     pub transaction: Account<'info, Transaction>,
+    pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
 
@@ -144,11 +190,6 @@ pub struct CreatePool<'info> {
     #[account(init, payer = owner, space = Pool::LEN, seeds = [pool_name.as_ref()], bump)]
     pub pool: Account<'info, Pool>,
     pub system_program: Program<'info, System>,
-}
-
-enum TransactionType {
-    Deposit,
-    Withdrawal,
 }
 
 enum Pools {
@@ -179,8 +220,8 @@ pub struct Game {
 #[account]
 pub struct Transaction {
     pub timestamp: i64,
-    pub amount: u64,
-    pub transaction_type: u64,
+    pub amount: f64,
+    pub transaction_type: String,
 }
 
 #[account]
@@ -205,6 +246,8 @@ pub struct User {
     pub game_history_count: u64,
     // needs to be reset to balance at the start of each game
     pub current_average_balance: f64,
+    pub current_weighted_balance: f64,
+    pub current_weighted_days: u64,
     pub txn_count: u64,
     pub pool: String,
 }
@@ -234,6 +277,15 @@ impl Transaction {
         + AMOUNT
         + TIMESTAMP 
         + STRING_PREFIX;
+
+    fn getType(key: String) -> String {
+        let mut txn_types: HashMap<String, String> = HashMap::new();
+        txn_types.insert(String::from("deposit"), String::from("deposit"));
+        if txn_types.contains_key(&key) {
+            return key;
+        }
+        return "".to_string();
+    }
 }
 // TODO: Calculate space for UserGameHistory Account
 // TODO: Calculate space for GameHistory Account
