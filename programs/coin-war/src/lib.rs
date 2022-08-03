@@ -240,8 +240,9 @@ pub mod coin_war {
         pool.total_deposit = pool.total_deposit + amount;
 
         // Update pool count if user not in pool
-        if user.pool.trim().is_empty() || user.pool.ne(&ctx.accounts.pool.name) {
-            user.pool = ctx.accounts.pool.name.clone();
+        if user.pool == 0 || user.pool.ne(&pool.name) {
+            user.pool = pool.name.clone();
+            pool.user_count += 1;
         } 
 
         // Create new transaction
@@ -483,7 +484,7 @@ pub struct GameHistory {
 
 #[account]
 pub struct User {
-    pub pool: String,
+    pub pool: u8,
     pub balance: f64,
     // used to read UserGameHistory
     pub last_active: i64,
