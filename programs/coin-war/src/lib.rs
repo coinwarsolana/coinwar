@@ -1,4 +1,4 @@
-use anchor_lang::solana_program::pubkey;
+// use anchor_lang::solana_program::pubkey;
 use solana_program::pubkey::Pubkey;
 use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::token::{TokenAccount, Transfer, Token, Mint};
@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 // TODO: Create pubkey for owner program and each of the four pool wallets
-const OWNER: Pubkey = pubkey!("adfadsfsdafssdfadsfdsaffdafssddyuoiwdafdsaf"); // TODO: this needs to be public key of the program wallet
+// const OWNER: Pubkey = pubkey!("adfadsfsdafssdfadsfdsaffdafssddyuoiwdafdsaf"); // TODO: this needs to be public key of the program wallet
 
 
 /* Game Logic - User deposits USDC into one of 4 pools. At the end of the week selection of a winning pool based on weighted 
@@ -26,26 +26,27 @@ pub mod coin_war {
     const INITIAL_POOL_PRIZE: f64 = 100.00; 
 
     // Create a pool. This needs to be called once for each of the pools defined in enum Pools.
-    pub fn createPool(ctx: Context<CreatePool>, pool_name: String) -> Result<()> {
-        require!(ctx.accounts.pool.isInitialized == false, ErrorCode::PoolAlreadyCreated);
+    pub fn create_pool(ctx: Context<CreatePool>, pool_name: String) -> Result<()> {
+        require!(ctx.accounts.pool.is_initialized == false, ErrorCode::PoolAlreadyCreated);
         let clock: Clock = Clock::get().unwrap();
         let pool = &mut ctx.accounts.pool;
-        pool.isInitialized = true;
-        pool.lastUpdateTimestamp = clock.unix_timestamp;
-        pool.totalDeposit = 0.00;
-        pool.totalPrize = INITIAL_POOL_PRIZE; // should be a non-zero number for cold-start
+        pool.is_initialized = true;
+        pool.last_update_timestamp = clock.unix_timestamp;
+        pool.total_deposit = 0.00;
+        pool.total_prize = INITIAL_POOL_PRIZE; // should be a non-zero number for cold-start
         pool.user_count = 0;
-        
+        pool.name = Pool::get_name(pool_name);
+
         Ok(())
     }
 
     // Create a game. This needs to be called once.
-    pub fn createGame(ctx: Context<CreateGame>, start_time: i64, end_time: i64) -> Result<()> {
+    pub fn create_game(ctx: Context<CreateGame>, start_time: i64, end_time: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
-        game.startTime = start_time;
-        game.endTime = end_time;
-        game.winningPool = String::from("solana");
-        game.winningAmount = INITIAL_POOL_PRIZE;
+        game.start_time = start_time;
+        game.end_time = end_time;
+        game.winning_pool = String::from("solana");
+        game.winning_amount = INITIAL_POOL_PRIZE;
 
         Ok(())
     }
@@ -89,8 +90,8 @@ pub mod coin_war {
 
         // Transfer amount from user wallet to pool wallet
         let cpi_accounts = Transfer {
-            from: ctx.accounts.initializer.clone(),
-            to: ctx.accounts.pool.clone(), // pool wallet
+            from: ctx.accounts.user_token_account.to_account_info().clone(), // user wallet
+            to: ctx.accounts.pool_token_account.to_account_info().clone(), // pool wallet
             authority: ctx.accounts.initializer.to_account_info().clone(),
         };
         let cpi_context = CpiContext::new(
@@ -113,15 +114,17 @@ pub mod coin_war {
 
         // Update pool balance
         let pool = &mut ctx.accounts.pool;
-        pool.totalDeposit = pool.totalDeposit + amount;
+        pool.total_deposit = pool.total_deposit + amount;
 
         // Update pool count if user not in pool
-
+        if user.pool.trim().is_empty() || user.pool.ne(&ctx.accounts.pool.name) {
+            user.pool = ctx.accounts.pool.name.clone();
+        } 
 
         // Create new transaction
         let transaction = &mut ctx.accounts.transaction;
         transaction.amount = amount;
-        transaction.transaction_type = Transaction::getType("deposit".to_string());
+        transaction.transaction_type = Transaction::get_type("deposit".to_string());
         transaction.timestamp = clock.unix_timestamp;
         Ok(())
     }
@@ -143,7 +146,8 @@ pub struct EndGame<'info> {
 #[derive(Accounts)]
 #[instruction(start_time: i64, end_time: i64)]
 pub struct CreateGame<'info> {
-    #[account(mut, constraint = owner.key() == OWNER)]
+    // TODO: add constraint = owner.key() == OWNER
+    #[account(mut)]
     pub owner: Signer<'info>,
     #[account(init, payer = owner, space = Game::LEN)]
     pub game: Account<'info, Game>,
@@ -167,53 +171,71 @@ pub struct Withdraw<'info> {
 pub struct Deposit<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
-    #[account(init, payer = initializer, space = User::LEN)]
+    #[account(mut, seeds = [], bump)]
     pub user: Account<'info, User>,
+    #[account(
+        mut,
+        token::mint = mint_address,
+        token::authority = initializer.key(),
+    )]
+    pub user_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub pool: Account<'info, Pool>,
+    #[account(
+        mut,
+        token::mint = mint_address,
+        token::authority = pool.key(),
+    )]
+    pub pool_token_account: Account<'info, TokenAccount>,   
     #[account(
         init, 
         payer = initializer, 
         space = Transaction::LEN, 
         seeds = ["Tx".as_ref(), user.key().as_ref(), pool.key().as_ref(), &user.txn_count.to_be_bytes()] 
-        , bump)]
+        , bump)] 
     pub transaction: Account<'info, Transaction>,
     pub token_program: Program<'info, Token>,
+    pub mint_address: Box<Account<'info, Mint>>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CreateUser<'info> {
+    #[account(mut)]
+    pub initializer: Signer<'info>,
+    #[account(init, payer = initializer, space = User::LEN, seeds = ["User".as_ref(), initializer.key().as_ref()], bump)]
+    pub user: Account<'info, User>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 #[instruction(pool_name: String)]
 pub struct CreatePool<'info> {
-    #[account(mut, constraint = owner.key() == OWNER)]
+    // TODO: add constraint = owner.key() == OWNER
+    #[account(mut)]
     pub owner: Signer<'info>,
     #[account(init, payer = owner, space = Pool::LEN, seeds = [pool_name.as_ref()], bump)]
     pub pool: Account<'info, Pool>,
+    pub pool_token_acccount: Account<'info, TokenAccount>,
     pub system_program: Program<'info, System>,
-}
-
-enum Pools {
-    Etherum,
-    Bnb,
-    Solana,
-    Polygon,
 }
 
 #[account]
 pub struct Pool {
-    pub isInitialized: bool,
-    pub lastUpdateTimestamp: i64,
-    pub totalDeposit: f64,
-    pub totalPrize: f64,
+    pub is_initialized: bool,
+    pub last_update_timestamp: i64,
+    pub total_deposit: f64,
+    pub total_prize: f64,
     pub user_count: u64,
+    pub name: String,
 }
 
 #[account]
 pub struct Game {
-    pub startTime: i64,
-    pub endTime: i64,
-    pub winningPool: String,
-    pub winningAmount: f64,
+    pub start_time: i64,
+    pub end_time: i64,
+    pub winning_pool: String,
+    pub winning_amount: f64,
 }
 
 // PDA
@@ -226,15 +248,15 @@ pub struct Transaction {
 
 #[account]
 pub struct UserGameHistory {
-    pub gameId: u64,
+    pub game_id: u64,
     pub winning: f64,
-    pub userId: u64,
+    pub user_id: u64,
 }
 
 #[account]
 pub struct GameHistory {
-    pub gameId: u64,
-    pub winningPool: String,
+    pub game_id: u64,
+    pub winning_pool: String,
     pub winning: f64
 }
 
@@ -242,7 +264,7 @@ pub struct GameHistory {
 pub struct User {
     pub balance: f64,
     // used to read UserGameHistory
-    pub lastActive: i64,
+    pub last_active: i64,
     pub game_history_count: u64,
     // needs to be reset to balance at the start of each game
     pub current_average_balance: f64,
@@ -278,7 +300,7 @@ impl Transaction {
         + TIMESTAMP 
         + STRING_PREFIX;
 
-    fn getType(key: String) -> String {
+    fn get_type(key: String) -> String {
         let mut txn_types: HashMap<String, String> = HashMap::new();
         txn_types.insert(String::from("deposit"), String::from("deposit"));
         if txn_types.contains_key(&key) {
@@ -298,6 +320,18 @@ impl Pool {
         + AMOUNT
         + AMOUNT
         + COUNT;
+
+    fn get_name(key: String) -> String {
+        let mut pool_names: HashMap<String, String> = HashMap::new();
+        pool_names.insert("ethereum".to_string(), "Ethereum".to_string());
+        pool_names.insert("bnb".to_string(), "BNB".to_string());
+        pool_names.insert("solana".to_string(), "Solana".to_string());
+        pool_names.insert("polygon".to_string(), "Polygon".to_string());
+        if pool_names.contains_key(&key) {
+            return key;
+        }
+        return "".to_string();
+    }
 }
 
 // Calculate space for Game Account
