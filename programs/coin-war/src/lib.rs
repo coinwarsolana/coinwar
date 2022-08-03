@@ -262,6 +262,7 @@ pub struct GameHistory {
 
 #[account]
 pub struct User {
+    pub pool: String,
     pub balance: f64,
     // used to read UserGameHistory
     pub last_active: i64,
@@ -271,7 +272,6 @@ pub struct User {
     pub current_weighted_balance: f64,
     pub current_weighted_days: u64,
     pub txn_count: u64,
-    pub pool: String,
 }
 
 const DISCRIMINATOR: usize = 8;
@@ -291,6 +291,8 @@ impl User {
         + COUNT
         + AMOUNT
         + AMOUNT
+        + AMOUNT
+        + COUNT
         + STRING_PREFIX + POOL;
 }
 // Calculate space for Transaction Account
