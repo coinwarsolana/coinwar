@@ -125,8 +125,10 @@ pub mod coin_war {
     // Distribute prize to the one big winner
     // Distribute prize to every other user in the winning pool, and record winnings for each user
     // Mark game as done and start next game  
-    pub fn end_game(ctx: Context<EndGame>) -> Result<()> {
+    pub fn end_game(ctx: Context<EndGame>, pool_names: Vec<u8>, pool_total: Vec<f64>) -> Result<()> {
         // consider moving everything other than the winner select off the blockchain
+        // break into following methods: select_winning_pool(), calculate_interest(), select_winner_from_winning_pool(), 
+        // pay_winner(), pay_winning_pool_user(), end_game()
         Ok(())
     }
 
