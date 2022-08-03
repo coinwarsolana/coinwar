@@ -29,7 +29,7 @@ pub mod coin_war {
         pool.lastUpdateTimestamp = clock.unix_timestamp;
         pool.totalDeposit = 0.00;
         pool.totalPrize = INITIAL_POOL_PRIZE; // should be a non-zero number for cold-start
-        pool.user_count = 0;
+        pool.user_count = 0; 
         
         Ok(())
     }
