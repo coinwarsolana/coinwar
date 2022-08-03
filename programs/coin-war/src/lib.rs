@@ -29,13 +29,13 @@ pub mod coin_war {
         pool.lastUpdateTimestamp = clock.unix_timestamp;
         pool.totalDeposit = 0.00;
         pool.totalPrize = INITIAL_POOL_PRIZE; // should be a non-zero number for cold-start
-        pool.user_count = 0; 
+        pool.user_count = 0;
         
         Ok(())
     }
 
     // Create a game. This needs to be called once.
-    pub fn createGame(ctx: Context<CreateGame>, start_time: i64, end_time: i64, winning_pool: String, winning_amount: u64) -> Result<()> {
+    pub fn createGame(ctx: Context<CreateGame>, start_time: i64, end_time: i64) -> Result<()> {
         let game = &mut ctx.accounts.game;
         game.startTime = start_time;
         game.endTime = end_time;
@@ -96,7 +96,7 @@ pub struct EndGame<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(start_time: i64, end_time: i64, winning_pool: String, winning_amount: u64)]
+#[instruction(start_time: i64, end_time: i64)]
 pub struct CreateGame<'info> {
     #[account(mut, constraint = owner.key() == OWNER)]
     pub owner: Signer<'info>,
