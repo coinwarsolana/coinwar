@@ -21,9 +21,13 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 
 #[program]
 pub mod coin_war {
+    use anchor_lang::accounts;
+
     use super::*;
 
     const INITIAL_POOL_PRIZE: f64 = 100.00; 
+    const GAME_DURATION_IN_DAYS: i64 = 5;
+    const GAME_DURATION_IN_SECS: i64 = GAME_DURATION_IN_DAYS * 24 * 60 * 60;
 
     // Create a pool. This needs to be called once for each of the pools defined in enum Pools.
     pub fn create_pool(ctx: Context<CreatePool>, pool_name: String) -> Result<()> {
@@ -52,11 +56,25 @@ pub mod coin_war {
     }
 
     // Set every user average balance to the balance
-    // Create new Game Account
-    // pub fn startGame(ctx: Context<Game>) -> Result<()> {
+    pub fn reset_user_average_balance(ctx: Context<ResetUserAverageBalance>) -> Result<()> {
+        let user = &mut ctx.accounts.user;
+        user.current_weighted_days = 7;
+        user.current_weighted_balance = user.balance;
+        user.current_average_balance = user.balance;
+        Ok(())
+    }
 
-    //     Ok(())
-    // }
+    // Create new Game Account
+    pub fn start_game(ctx: Context<StartGame>, new_game_id: u64) -> Result<()> {
+        let clock: Clock = Clock::get().unwrap();
+        let game = &mut ctx.accounts.game;
+        game.game_id = new_game_id;
+        game.start_time = clock.unix_timestamp;
+        game.end_time = clock.unix_timestamp + GAME_DURATION_IN_SECS;
+        game.winning_amount = 0.0;
+        game.winning_pool = "".to_string();
+        Ok(())
+    }
 
     // Tally up total for all the pools, and perform a weighted randomized selection for a winner
     // Calculate the total interests
@@ -64,22 +82,72 @@ pub mod coin_war {
     // Distribute prize to the one big winner
     // Distribute prize to every other user in the winning pool, and record winnings for each user
     // Mark game as done and start next game  
-    // pub fn endGame(ctx: Context<Game>) -> Result<()> {
-        
-    //     Ok(())
-    // }
+    pub fn end_game(ctx: Context<EndGame>) -> Result<()> {
+        // consider moving everything other than the winner select off the blockchain
+        Ok(())
+    }
 
-    // Transfer from user wallet to pool wallet
+    // Transfer from pool wallet to user wallet
     // Update user balance
     // Update pool balance
     // Update pool count if needed
     // Update average balance for user
     // Create new transaction
     // Only allowed to deposit in one pool
-    // pub fn withdraw(ctx: Context<Withdraw>, amount: f64) -> Result<()> {
+    pub fn withdraw(ctx: Context<Withdraw>, amount: f64, seedphrase: String) -> Result<()> {
+        let clock: Clock = Clock::get().unwrap();
 
-    //     Ok(())
-    // }
+        // Transfer from pool wallet to user wallet
+        let (_key, bump) = Pubkey::find_program_address(&[
+            seedphrase.as_bytes()
+            ], ctx.program_id);
+
+        let signer_seed = [
+            seedphrase.as_bytes(),
+            &[bump]];
+
+        // Transfer amount from pool wallet to user wallet
+        let cpi_accounts = Transfer {
+            from: ctx.accounts.pool_token_account.to_account_info().clone(), // user wallet
+            to: ctx.accounts.user_token_account.to_account_info().clone(), // pool wallet
+            authority: ctx.accounts.initializer.to_account_info().clone(),
+        };
+
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info().clone(), 
+                cpi_accounts, 
+                &[&signer_seed[..]]
+            ),
+            amount as u64
+        )?;
+
+        // Update user balance
+        let user = &mut ctx.accounts.user;
+        user.balance = user.balance - amount;
+
+        // Update pool balance  
+        let pool = &mut ctx.accounts.pool;
+        pool.total_deposit = pool.total_deposit - amount;
+
+        // Update pool count if needed
+        if user.balance <= 0.0 {
+            pool.user_count -= 1;
+        }
+
+        // Update average balance for user (user average balance is reset to current balance)
+        user.current_average_balance = user.balance;
+        user.current_weighted_balance = user.balance * GAME_DURATION_IN_DAYS as f64;
+        user.current_weighted_days = GAME_DURATION_IN_DAYS;
+
+        // Create new transaction
+        let transaction = &mut ctx.accounts.transaction;
+        transaction.amount = amount;
+        transaction.transaction_type = Transaction::get_type("withdrawal".to_string());
+        transaction.timestamp = clock.unix_timestamp;
+
+        Ok(())
+    }
 
     // Transfer from pool wallet to user wallet
     // Update user balance
@@ -138,21 +206,31 @@ pub mod coin_war {
         transaction.amount = amount;
         transaction.transaction_type = Transaction::get_type("deposit".to_string());
         transaction.timestamp = clock.unix_timestamp;
+
         Ok(())
     }
 }
 
 
 #[derive(Accounts)]
+#[instruction(new_game_id: u64)]
 pub struct StartGame<'info> {
     #[account(mut)]
-    pub game: Account<'info, Game>
+    pub owner: Signer<'info>,
+    #[account(init, payer = owner, space = Pool::LEN, seeds = [b"game".as_ref(), &new_game_id.to_be_bytes()], bump)]
+    pub game: Account<'info, Game>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
+#[instruction(game_id: u64)]
 pub struct EndGame<'info> {
+    // TODO: add constraint = owner.key() == OWNER
     #[account(mut)]
-    pub game: Account<'info, Game>
+    pub owner: Signer<'info>,
+    #[account(mut, seeds = [b"game".as_ref(), &game_id.to_be_bytes()], bump)]
+    pub game: Account<'info, Game>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -171,10 +249,31 @@ pub struct CreateGame<'info> {
 pub struct Withdraw<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
-    #[account(mut)]
+    #[account(mut, seeds = [b"user".as_ref(), initializer.key().as_ref()], bump)]
     pub user: Account<'info, User>,
+    #[account(
+        mut,
+        token::mint = mint_address,
+        token::authority = initializer.key(),
+    )]
+    pub user_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub pool: Account<'info, Pool>,
+    #[account(
+        mut,
+        token::mint = mint_address,
+        token::authority = pool.key(),
+    )]
+    pub pool_token_account: Account<'info, TokenAccount>,   
+    #[account(
+        init, 
+        payer = initializer, 
+        space = Transaction::LEN, 
+        seeds = [b"tx".as_ref(), user.key().as_ref(), pool.key().as_ref(), &user.txn_count.to_be_bytes()] 
+        , bump)] 
+    pub transaction: Account<'info, Transaction>,
+    pub token_program: Program<'info, Token>,
+    pub mint_address: Box<Account<'info, Mint>>,
     pub system_program: Program<'info, System>,
 }
 
@@ -183,7 +282,7 @@ pub struct Withdraw<'info> {
 pub struct Deposit<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
-    #[account(mut, seeds = [], bump)]
+    #[account(mut, seeds = [b"user".as_ref(), initializer.key().as_ref()], bump)]
     pub user: Account<'info, User>,
     #[account(
         mut,
@@ -221,6 +320,15 @@ pub struct CreateUser<'info> {
 }
 
 #[derive(Accounts)]
+pub struct ResetUserAverageBalance<'info> {
+    #[account(mut)]
+    pub initializer: Signer<'info>,
+    #[account(init, payer = initializer, space = User::LEN, seeds = [b"user".as_ref(), initializer.key().as_ref()], bump)]
+    pub user: Account<'info, User>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 #[instruction(pool_name: String)]
 pub struct CreatePool<'info> {
     // TODO: add constraint = owner.key() == OWNER
@@ -249,13 +357,13 @@ pub struct Pool {
 
 #[account]
 pub struct Game {
+    pub game_id: u64,
     pub start_time: i64,
     pub end_time: i64,
     pub winning_pool: String,
     pub winning_amount: f64,
 }
 
-// PDA
 #[account]
 pub struct Transaction {
     pub timestamp: i64,
@@ -287,7 +395,7 @@ pub struct User {
     // needs to be reset to balance at the start of each game
     pub current_average_balance: f64,
     pub current_weighted_balance: f64,
-    pub current_weighted_days: u64,
+    pub current_weighted_days: i64,
     pub txn_count: u64,
 }
 
@@ -370,4 +478,6 @@ pub enum ErrorCode {
     MultiplePoolNotAllowed,
     #[msg("This pool has already been created.")]
     PoolAlreadyCreated,
+    #[msg("Wallet to withdraw from is not owned by owner")]
+    WalletToWithdrawFromInvalid,
 }
