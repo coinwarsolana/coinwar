@@ -19,6 +19,47 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
  * increase the average balance.
  */
 
+// utility function to send tokens
+fn transfer_token<'info>(
+    user_sending: AccountInfo<'info>,
+    user_receiving: AccountInfo<'info>,
+    mint_of_token_being_sent: AccountInfo<'info>,
+    escrow_wallet: &mut Account<'info, TokenAccount>,
+    application_idx: u64,
+    state: AccountInfo<'info>,
+    state_bump: u8,
+    token_program: AccountInfo<'info>,
+    destination_wallet: AccountInfo<'info>,
+    amount: u64
+) -> Result<()> {
+    let bump_vector = state_bump.to_le_bytes();
+    let mint_of_token_being_sent_pk = mint_of_token_being_sent.key().clone();
+    let application_idx_bytes = application_idx.to_le_bytes();
+    let inner = vec![
+        b"state".as_ref(),
+        user_sending.key.as_ref(),
+        user_receiving.key.as_ref(),
+        mint_of_token_being_sent_pk.as_ref(), 
+        application_idx_bytes.as_ref(),
+        bump_vector.as_ref(),
+    ];
+    let outer = vec![inner.as_slice()];
+
+    // Perform the actual transfer
+    let transfer_instruction = Transfer{
+        from: escrow_wallet.to_account_info(),
+        to: destination_wallet,
+        authority: state.to_account_info(),
+    };
+    let cpi_ctx = CpiContext::new_with_signer(
+        token_program.to_account_info(),
+        transfer_instruction,
+        outer.as_slice(),
+    );
+    anchor_spl::token::transfer(cpi_ctx, amount)?;
+    Ok(())
+}
+
 #[program]
 pub mod coin_war {
     use anchor_lang::accounts;
@@ -45,11 +86,12 @@ pub mod coin_war {
     }
 
     // Create a game. This needs to be called once.
-    pub fn create_game(ctx: Context<CreateGame>, start_time: i64, end_time: i64) -> Result<()> {
+    pub fn create_game(ctx: Context<CreateGame>, start_time: i64, end_time: i64, pool_name: u8) -> Result<()> {
+        let pool = Pools::from(pool_name)?;
         let game = &mut ctx.accounts.game;
         game.start_time = start_time;
         game.end_time = end_time;
-        game.winning_pool = String::from("solana");
+        game.winning_pool = pool.to_code();
         game.winning_amount = INITIAL_POOL_PRIZE;
 
         Ok(())
@@ -72,7 +114,7 @@ pub mod coin_war {
         game.start_time = clock.unix_timestamp;
         game.end_time = clock.unix_timestamp + GAME_DURATION_IN_SECS;
         game.winning_amount = 0.0;
-        game.winning_pool = "".to_string();
+        game.winning_pool = 0;
         Ok(())
     }
 
@@ -143,7 +185,7 @@ pub mod coin_war {
         // Create new transaction
         let transaction = &mut ctx.accounts.transaction;
         transaction.amount = amount;
-        transaction.transaction_type = Transaction::get_type("withdrawal".to_string());
+        transaction.transaction_type = Transaction_Type::Withdrawal.to_code();
         transaction.timestamp = clock.unix_timestamp;
 
         Ok(())
@@ -204,7 +246,7 @@ pub mod coin_war {
         // Create new transaction
         let transaction = &mut ctx.accounts.transaction;
         transaction.amount = amount;
-        transaction.transaction_type = Transaction::get_type("deposit".to_string());
+        transaction.transaction_type = Transaction_Type::Deposit.to_code();
         transaction.timestamp = clock.unix_timestamp;
 
         Ok(())
@@ -340,9 +382,62 @@ pub struct CreatePool<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Clone, Copy, PartialEq)]
 enum Transaction_Type {
     Deposit,
     Withdrawal
+}
+
+impl Transaction_Type {
+    fn to_code(&self) -> u8 {
+        match self {
+            Transaction_Type::Deposit => 1,
+            Transaction_Type::Withdrawal => 2,
+        }
+    }
+
+    fn from(val: u8) -> std::result::Result<Transaction_Type, Error> {
+        match val {
+            1 => Ok(Transaction_Type::Deposit),
+            2 => Ok(Transaction_Type::Withdrawal),
+            unknown_value => {
+                msg!("Unknown transaction type: {}", unknown_value);
+                Err(ErrorCode::TransactionTypeUnknown.into())
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Pools {
+    Solana,
+    BNB,
+    Polygon,
+    Ethereum
+}
+
+impl Pools {
+    fn to_code(&self) -> u8 {
+        match self {
+            Pools::Solana => 1,
+            Pools::BNB => 2,
+            Pools::Polygon => 3,
+            Pools::Ethereum => 4,
+        }
+    }
+
+    fn from(val: u8) -> std::result::Result<Pools, Error> {
+        match val {
+            1 => Ok(Pools::Solana),
+            2 => Ok(Pools::BNB),
+            3 => Ok(Pools::Polygon),
+            4 => Ok(Pools::Ethereum),
+            unknown_value => {
+                msg!("Unknown pool: {}", unknown_value);
+                Err(ErrorCode::PoolUnknown.into())
+            }
+        }
+    }
 }
 
 #[account]
@@ -360,7 +455,7 @@ pub struct Game {
     pub game_id: u64,
     pub start_time: i64,
     pub end_time: i64,
-    pub winning_pool: String,
+    pub winning_pool: u8,
     pub winning_amount: f64,
 }
 
@@ -368,7 +463,7 @@ pub struct Game {
 pub struct Transaction {
     pub timestamp: i64,
     pub amount: f64,
-    pub transaction_type: String,
+    pub transaction_type: u8,
 }
 
 #[account]
@@ -478,6 +573,10 @@ pub enum ErrorCode {
     MultiplePoolNotAllowed,
     #[msg("This pool has already been created.")]
     PoolAlreadyCreated,
-    #[msg("Wallet to withdraw from is not owned by owner")]
+    #[msg("Wallet to withdraw from is not owned by owner.")]
     WalletToWithdrawFromInvalid,
+    #[msg("Unknown transaction type.")]
+    TransactionTypeUnknown,
+    #[msg("Unknown pool.")]
+    PoolUnknown,
 }
