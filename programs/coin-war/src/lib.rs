@@ -18,19 +18,39 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 pub mod coin_war {
     use super::*;
 
-    // Create all the pools listed in the Pools enum
+    const INITIAL_POOL_PRIZE: f64 = 100.00;
+
+    // Create a pool. This needs to be called once for each of the pools defined in enum Pools.
     pub fn createPool(ctx: Context<CreatePool>, pool_name: String) -> Result<()> {
         require!(ctx.accounts.pool.isInitialized == false, ErrorCode::PoolAlreadyCreated);
-        ctx.accounts.pool.isInitialized = true;
+        let clock: Clock = Clock::get().unwrap();
+        let pool = &mut ctx.accounts.pool;
+        pool.isInitialized = true;
+        pool.lastUpdateTimestamp = clock.unix_timestamp;
+        pool.totalDeposit = 0.00;
+        pool.totalPrize = INITIAL_POOL_PRIZE; // should be a non-zero number for cold-start
+        pool.user_count = 0;
         
+        Ok(())
+    }
+
+    // Create a game. This needs to be called once.
+    pub fn createGame(ctx: Context<CreateGame>, start_time: i64, end_time: i64, winning_pool: String, winning_amount: u64) -> Result<()> {
+        let game = &mut ctx.accounts.game;
+        game.startTime = start_time;
+        game.endTime = end_time;
+        game.winningPool = String::from("solana");
+        game.winningAmount = INITIAL_POOL_PRIZE;
+
         Ok(())
     }
 
     // Set every user average balance to the balance
     // Create new Game Account
-    pub fn startGame(ctx: Context<Game>) -> Result<()> {
-        Ok(())
-    }
+    // pub fn startGame(ctx: Context<Game>) -> Result<()> {
+
+    //     Ok(())
+    // }
 
     // Tally up total for all the pools, and perform a weighted randomized selection for a winner
     // Calculate the total interests
@@ -38,10 +58,10 @@ pub mod coin_war {
     // Distribute prize to the one big winner
     // Distribute prize to every other user in the winning pool, and record winnings for each user
     // Mark game as done and start next game  
-    pub fn endGame(ctx: Context<Game>) -> Result<()> {
+    // pub fn endGame(ctx: Context<Game>) -> Result<()> {
         
-        Ok(())
-    }
+    //     Ok(())
+    // }
 
     // Transfer from user wallet to pool wallet
     // Update user balance
@@ -61,6 +81,8 @@ pub mod coin_war {
     }
 }
 
+const OWNER: Pubkey = Pubkey::new_unique(); // TODO: this needs to be public key of the program wallet
+
 #[derive(Accounts)]
 pub struct StartGame<'info> {
     #[account(mut)]
@@ -71,6 +93,16 @@ pub struct StartGame<'info> {
 pub struct EndGame<'info> {
     #[account(mut)]
     pub game: Account<'info, Game>
+}
+
+#[derive(Accounts)]
+#[instruction(start_time: i64, end_time: i64, winning_pool: String, winning_amount: u64)]
+pub struct CreateGame<'info> {
+    #[account(mut, constraint = owner.key() == OWNER)]
+    pub owner: Signer<'info>,
+    #[account(init, payer = owner, space = Game::LEN)]
+    pub game: Account<'info, Game>,
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -104,7 +136,6 @@ pub struct Deposit<'info> {
     pub system_program: Program<'info, System>,
 }
 
-const OWNER: Pubkey = static_pubkey::static_pubkey!("jakcasdfasfaskcb"); // public key of the program wallet
 #[derive(Accounts)]
 #[instruction(pool_name: String)]
 pub struct CreatePool<'info> {
@@ -138,8 +169,8 @@ pub struct Pool {
 
 #[account]
 pub struct Game {
-    pub startTime: u64,
-    pub endTime: u64,
+    pub startTime: i64,
+    pub endTime: i64,
     pub winningPool: String,
     pub winningAmount: f64,
 }
@@ -148,7 +179,7 @@ pub struct Game {
 #[account]
 pub struct Transaction {
     pub timestamp: i64,
-    pub amount: f64,
+    pub amount: u64,
     pub transaction_type: u64,
 }
 
@@ -206,6 +237,7 @@ impl Transaction {
 }
 // TODO: Calculate space for UserGameHistory Account
 // TODO: Calculate space for GameHistory Account
+
 // Calculate space for Pool Account
 impl Pool {
     const LEN: usize = DISCRIMINATOR
@@ -214,6 +246,15 @@ impl Pool {
         + AMOUNT
         + AMOUNT
         + COUNT;
+}
+
+// Calculate space for Game Account
+impl Game {
+    const LEN: usize = DISCRIMINATOR
+        + TIMESTAMP
+        + TIMESTAMP 
+        + STRING_PREFIX + POOL
+        + AMOUNT;
 }
 
 #[error_code]
