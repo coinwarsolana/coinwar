@@ -1,4 +1,4 @@
-// use anchor_lang::solana_program::pubkey;
+use anchor_lang::solana_program::pubkey;
 use solana_program::pubkey::Pubkey;
 use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::token::{TokenAccount, Transfer, Token, Mint};
@@ -85,8 +85,16 @@ pub mod coin_war {
     // Update user balance
     // Update pool balance
     // Zero out average balance?
-    pub fn deposit(ctx: Context<Deposit>, amount: f64) -> Result<()> {
+    pub fn deposit(ctx: Context<Deposit>, amount: f64, seedphrase: String) -> Result<()> {
         let clock: Clock = Clock::get().unwrap();
+
+        let (_key, bump) = Pubkey::find_program_address(&[
+            seedphrase.as_bytes()
+            ], ctx.program_id);
+
+        let signer_seed = [
+            seedphrase.as_bytes(),
+            &[bump]];
 
         // Transfer amount from user wallet to pool wallet
         let cpi_accounts = Transfer {
@@ -94,11 +102,15 @@ pub mod coin_war {
             to: ctx.accounts.pool_token_account.to_account_info().clone(), // pool wallet
             authority: ctx.accounts.initializer.to_account_info().clone(),
         };
-        let cpi_context = CpiContext::new(
-            ctx.accounts.token_program.to_account_info().clone(), 
-            cpi_accounts);
 
-        token::transfer(cpi_context, amount as u64);
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info().clone(), 
+                cpi_accounts, 
+                &[&signer_seed[..]]
+            ),
+            amount as u64
+        )?;
 
         // Update user balance
         let user = &mut ctx.accounts.user;
@@ -191,7 +203,7 @@ pub struct Deposit<'info> {
         init, 
         payer = initializer, 
         space = Transaction::LEN, 
-        seeds = ["Tx".as_ref(), user.key().as_ref(), pool.key().as_ref(), &user.txn_count.to_be_bytes()] 
+        seeds = [b"tx".as_ref(), user.key().as_ref(), pool.key().as_ref(), &user.txn_count.to_be_bytes()] 
         , bump)] 
     pub transaction: Account<'info, Transaction>,
     pub token_program: Program<'info, Token>,
@@ -203,7 +215,7 @@ pub struct Deposit<'info> {
 pub struct CreateUser<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
-    #[account(init, payer = initializer, space = User::LEN, seeds = ["User".as_ref(), initializer.key().as_ref()], bump)]
+    #[account(init, payer = initializer, space = User::LEN, seeds = [b"user".as_ref(), initializer.key().as_ref()], bump)]
     pub user: Account<'info, User>,
     pub system_program: Program<'info, System>,
 }
@@ -218,6 +230,11 @@ pub struct CreatePool<'info> {
     pub pool: Account<'info, Pool>,
     pub pool_token_acccount: Account<'info, TokenAccount>,
     pub system_program: Program<'info, System>,
+}
+
+enum Transaction_Type {
+    Deposit,
+    Withdrawal
 }
 
 #[account]
