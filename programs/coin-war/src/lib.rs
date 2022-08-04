@@ -21,36 +21,22 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
  */
 
 // utility function to send tokens
-fn transfer_token_with_signer<'info>(
-    user_sending: AccountInfo<'info>,
-    user_receiving: AccountInfo<'info>,
-    mint_of_token_being_sent: AccountInfo<'info>,
-    escrow_wallet: &mut Account<'info, TokenAccount>,
-    application_idx: u64,
-    state: AccountInfo<'info>,
-    state_bump: u8,
+fn transfer_token_out_of_pool<'info>(
+    pool_wallet: &mut Account<'info, TokenAccount>,
     token_program: AccountInfo<'info>,
     destination_wallet: AccountInfo<'info>,
+    authority: AccountInfo<'info>,
+    pool_name: String,
     amount: u64
 ) -> Result<()> {
-    let bump_vector = state_bump.to_le_bytes();
-    let mint_of_token_being_sent_pk = mint_of_token_being_sent.key().clone();
-    let application_idx_bytes = application_idx.to_le_bytes();
-    let inner = vec![
-        b"state".as_ref(),
-        user_sending.key.as_ref(),
-        user_receiving.key.as_ref(),
-        mint_of_token_being_sent_pk.as_ref(), 
-        application_idx_bytes.as_ref(),
-        bump_vector.as_ref(),
-    ];
+    let inner = vec![b"pool_wallet".as_ref(), pool_name.as_ref()];
     let outer = vec![inner.as_slice()];
 
     // Perform the actual transfer
     let transfer_instruction = Transfer{
-        from: escrow_wallet.to_account_info(),
+        from: pool_wallet.to_account_info(),
         to: destination_wallet,
-        authority: state.to_account_info(),
+        authority: authority.to_account_info(),
     };
     let cpi_ctx = CpiContext::new_with_signer(
         token_program.to_account_info(),
@@ -180,25 +166,32 @@ pub mod coin_war {
         let pool_number = pool.name;
         let pool_name : String = Pools::code_to_string(pool_number);
 
+        transfer_token_out_of_pool(
+            &mut ctx.accounts.pool_token_account, 
+            ctx.accounts.token_program.to_account_info(), 
+            ctx.accounts.user_token_account.to_account_info(), 
+            ctx.accounts.initializer.to_account_info(), 
+            pool_name, 
+            amount as u64);
         // Transfer from pool wallet to user wallet
-        let inner = vec![b"pool_wallet".as_ref(), pool_name.as_ref()];
-        let outer = vec![inner.as_slice()];
+        // let inner = vec![b"pool_wallet".as_ref(), pool_name.as_ref()];
+        // let outer = vec![inner.as_slice()];
 
         // Transfer amount from pool wallet to user wallet
-        let cpi_accounts = Transfer {
-            from: ctx.accounts.pool_token_account.to_account_info().clone(), // user wallet
-            to: ctx.accounts.user_token_account.to_account_info().clone(), // pool wallet
-            authority: ctx.accounts.initializer.to_account_info().clone(),
-        };
+        // let cpi_accounts = Transfer {
+        //     from: ctx.accounts.pool_token_account.to_account_info().clone(), // user wallet
+        //     to: ctx.accounts.user_token_account.to_account_info().clone(), // pool wallet
+        //     authority: ctx.accounts.initializer.to_account_info().clone(),
+        // };
 
-        token::transfer(
-            CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info().clone(), 
-                cpi_accounts, 
-                outer.as_slice()
-            ),
-            amount as u64
-        )?;
+        // token::transfer(
+        //     CpiContext::new_with_signer(
+        //         ctx.accounts.token_program.to_account_info().clone(), 
+        //         cpi_accounts, 
+        //         outer.as_slice()
+        //     ),
+        //     amount as u64
+        // )?;
 
         // Update user balance
         let user = &mut ctx.accounts.user;
