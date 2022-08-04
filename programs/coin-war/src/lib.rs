@@ -20,7 +20,7 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
  * increase the average balance.
  */
 
-// utility function to send tokens
+// utility function to send tokens out of pool wallets
 fn transfer_token_out_of_pool<'info>(
     pool_wallet: &mut Account<'info, TokenAccount>,
     token_program: AccountInfo<'info>,
@@ -324,10 +324,8 @@ pub struct Withdraw<'info> {
     #[account(mut, seeds = [b"user".as_ref(), initializer.key().as_ref()], bump)]
     pub user: Account<'info, User>,
     #[account(
-        init,
-        payer = initializer,
-        associated_token::mint = mint_address,
-        associated_token::authority = initializer,
+        constraint=user_token_account.owner == user.key(),
+        constraint=user_token_account.mint == mint_address.key(),
     )]
     pub user_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
