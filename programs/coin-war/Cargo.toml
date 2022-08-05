@@ -21,3 +21,4 @@ overflow-checks = true
 [dependencies]
 anchor-lang = "0.25.0"
 anchor-spl = "0.25.0"
+rand = "0.8.5"

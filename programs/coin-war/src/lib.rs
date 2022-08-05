@@ -50,6 +50,7 @@ fn transfer_token_out_of_pool<'info>(
 #[program]
 pub mod coin_war {
     use anchor_lang::accounts;
+    use rand::Rng;
 
     use super::*;
 
@@ -119,9 +120,32 @@ pub mod coin_war {
     // pay_winner(), pay_winning_pool_user(), end_game()
 
     // Perform weighted randomized selection out of the 4 pools
-    // pub fn select_winning_pool(pool_names: Vec<u8>, pool_total: Vec<f64>) -> Result<()> {
-    //     Ok(())
-    // }   
+    pub fn select_winning_pool(ctx: Context<SelectWinningPool>, pool_names: Vec<u8>, pool_total: Vec<f64>) -> Result<String> {
+        let mut rng = rand::thread_rng();
+        let mut winning_pool_index = rng.gen_range(0..100);
+        // we divide the slots by the order defined in Pools enum Solana, BNB, Polygon, Ethereum with relative weights
+        let total: f64 = pool_total.iter().sum();
+        let mut pool_weights: Vec<u64> = Vec::new();
+        for i in 0..pool_total.len() {
+            let mut running_total: f64 = 0.0;
+            let pool_weight = pool_total[i] / total;
+            running_total += pool_weight;
+            pool_weights.push(running_total as u64);
+        }
+        let mut winning_index = 0;
+        for j in 0..pool_weights.len() {
+            if winning_pool_index <= pool_weights[j] {
+                winning_index = j;
+                break;
+            }
+        }
+
+        // TODO: Need to check the order of pool_names to make sure it matches the Pools enum
+        winning_index += 1;
+        let mut winning_pool: String = Pools::code_to_string(winning_index as u8);
+
+        Ok((winning_pool))
+    }   
 
     // Get interest amount
     // Put into pool interest account
@@ -383,6 +407,12 @@ pub struct Deposit<'info> {
     pub token_program: Program<'info, Token>,
     pub mint_address: Box<Account<'info, Mint>>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(pool_names: Vec<u8>, pool_total: Vec<f64>)]
+pub struct SelectWinningPool<> {
+
 }
 
 #[derive(Accounts)]
