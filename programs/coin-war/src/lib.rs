@@ -49,8 +49,9 @@ fn transfer_token_out_of_pool<'info>(
 
 #[program]
 pub mod coin_war {
+    use std::vec;
+
     use anchor_lang::accounts;
-    use rand::Rng;
 
     use super::*;
 
@@ -68,7 +69,6 @@ pub mod coin_war {
         pool.is_initialized = true;
         pool.last_update_timestamp = clock.unix_timestamp;
         pool.total_deposit = 0.00;
-        pool.total_prize = INITIAL_POOL_PRIZE; // should be a non-zero number for cold-start
         pool.user_count = 0;
         pool.name = pool_enum.to_code();
 
@@ -97,22 +97,22 @@ pub mod coin_war {
     }
 
     // Create new Game Account
-    pub fn start_game(ctx: Context<StartGame>, new_game_id: u64) -> Result<()> {
-        let clock: Clock = Clock::get().unwrap();
-        let game = &mut ctx.accounts.game;
-        game.game_id = new_game_id;
-        game.start_time = clock.unix_timestamp;
-        game.end_time = clock.unix_timestamp + GAME_DURATION_IN_SECS;
-        game.winning_amount = 0.0;
-        game.winning_pool = 0;
-        Ok(())
-    }
+    // pub fn start_game(ctx: Context<StartGame>, new_game_id: u64) -> Result<()> {
+    //     let clock: Clock = Clock::get().unwrap();
+    //     let game = &mut ctx.accounts.game;
+    //     game.game_id = new_game_id;
+    //     game.start_time = clock.unix_timestamp;
+    //     game.end_time = clock.unix_timestamp + GAME_DURATION_IN_SECS;
+    //     game.winning_amount = 0.0;
+    //     game.winning_pool = 0;
+    //     Ok(())
+    // }
 
     // Tally up total for all the pools, and perform a weighted randomized selection for a winner
-    // Calculate the total interests
-    // Take 80% of total interest as the prize. Pick one winner for 4% of the prize
+    // Calculate the total prize (interest)
+    // Take 80% of total interest as the prize. Pick one winner for 10% of the prize
     // Distribute prize to the one big winner
-    // Distribute prize to every other user in the winning pool, and record winnings for each user
+    // Distribute rest of 75% prize to every other user in the winning pool, and record winnings for each user
     // Mark game as done and start next game  
 
     // consider moving everything other than the winner select off the blockchain
@@ -121,8 +121,15 @@ pub mod coin_war {
 
     // Perform weighted randomized selection out of the 4 pools
     pub fn select_winning_pool(ctx: Context<SelectWinningPool>, pool_names: Vec<u8>, pool_total: Vec<f64>) -> Result<String> {
-        let mut rng = rand::thread_rng();
-        let mut winning_pool_index = rng.gen_range(0..100);
+        let time_stamp = &mut ctx.accounts.clock.unix_timestamp.clone();
+        let time_stamp_string = time_stamp.to_string();
+        let time_stamp_chars = &mut time_stamp_string.chars();
+        let first_digit = time_stamp_chars.last().unwrap();
+        let second_digit = time_stamp_chars.nth(time_stamp_chars.clone().count() - 2).unwrap();
+        let digits_array = [first_digit, second_digit];
+        let s: String = digits_array.iter().collect();
+        let winning_pool_index: u64 = s.parse().unwrap();
+
         // we divide the slots by the order defined in Pools enum Solana, BNB, Polygon, Ethereum with relative weights
         let total: f64 = pool_total.iter().sum();
         let mut pool_weights: Vec<u64> = Vec::new();
@@ -144,38 +151,27 @@ pub mod coin_war {
         winning_index += 1;
         let mut winning_pool: String = Pools::code_to_string(winning_index as u8);
 
-        Ok((winning_pool))
+        Ok(winning_pool)
     }   
 
-    // Get interest amount
-    // Put into pool interest account
-    // pub fn process_interest() -> Result<()> {
-    //     Ok(())
-    // }
 
     // Return a random number from 1 - count of user in pool
-    // pub fn select_winner_from_winning_pool(total_pool_user_count: u64) -> Result<()> {
+    // pub fn select_winner_from_winning_pool(ctx: Context<SelectWinnerFromPool>total_pool_user_count: u64) -> Result<()> {
     //     Ok(())
     // }
 
     // Input: user from select_winner_from_winning_pool
     // Pay user 10% of the winnings 
-    // pub fn pay_winner() -> Result<()> {
+    // pub fn pay_winner(ct: Context<PayWinner>) -> Result<(<u64 winner_index>)> {
     //     Ok(())
     // }
 
     // Calculate percent of the pool the user balance represents and pay out according
     // Takes in one user at a time
-    // pub fn pay_winning_pool_user() -> Result<()> {
-    //     Ok(())
-    // }
+    pub fn pay_winning_pool_user(ctx: Context<PayWinner>) -> Result<()> {
 
-    // TODO: Move this off blockchain
-    // Mark the game as done 
-    // Start a new game
-    // pub fn end_game(ctx: Context<EndGame>) -> Result<()> {
-    //     Ok(())
-    // }
+        Ok(())
+    }
 
     // Transfer from pool wallet to user wallet
     // Update user balance
@@ -308,15 +304,15 @@ pub mod coin_war {
 }
 
 
-#[derive(Accounts)]
-#[instruction(new_game_id: u64)]
-pub struct StartGame<'info> {
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    #[account(init, payer = owner, space = Pool::LEN, seeds = [b"game".as_ref(), &new_game_id.to_be_bytes()], bump)]
-    pub game: Account<'info, Game>,
-    pub system_program: Program<'info, System>,
-}
+// #[derive(Accounts)]
+// #[instruction(new_game_id: u64)]
+// pub struct StartGame<'info> {
+//     #[account(mut)]
+//     pub owner: Signer<'info>,
+//     #[account(init, payer = owner, space = Pool::LEN, seeds = [b"game".as_ref(), &new_game_id.to_be_bytes()], bump)]
+//     pub game: Account<'info, Game>,
+//     pub system_program: Program<'info, System>,
+// }
 
 #[derive(Accounts)]
 #[instruction(game_id: u64)]
@@ -365,7 +361,7 @@ pub struct Withdraw<'info> {
         payer = initializer, 
         space = Transaction::LEN, 
         seeds = [b"tx".as_ref(), user.key().as_ref(), pool.key().as_ref(), &user.txn_count.to_be_bytes()] 
-        , bump)] 
+, bump)] 
     pub transaction: Account<'info, Transaction>,
     pub token_program: Program<'info, Token>,
     pub mint_address: Box<Account<'info, Mint>>,
@@ -393,7 +389,7 @@ pub struct Deposit<'info> {
         mut,
         constraint=pool_token_account.owner == pool.key(),
         constraint=pool_token_account.mint == mint_address.key(),
-        seeds = [b"pool_wallet".as_ref(), pool_name.as_ref()],
+        seeds = [b"pool_wallet".as_ref()],
         bump,
     )]
     pub pool_token_account: Account<'info, TokenAccount>,   
@@ -410,9 +406,36 @@ pub struct Deposit<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(pool_names: Vec<u8>, pool_total: Vec<f64>)]
-pub struct SelectWinningPool<> {
+#[instruction(user_key: Pubkey, pool_name: String, prize_amount: f64)]
+pub struct PayWinner<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(seeds = [b"user".as_ref(), user_key.as_ref()], bump)]
+    pub user: Account<'info, User>,
+    #[account(
+        seeds = [b"user_wallet".as_ref(), user_key.as_ref()],
+        bump
+    )]
+    pub user_token_account: Account<'info, TokenAccount>,   
+    #[account(mut, seeds = [pool_name.as_ref()], bump)]
+    pub pool: Account<'info, Pool>,
+    #[account(
+        mut,
+        constraint=pool_token_account.owner == owner.key(),
+        constraint=pool_token_account.mint == mint_address.key(),
+        seeds = [b"pool_wallet".as_ref()],
+        bump,
+    )]
+    pub pool_token_account: Account<'info, TokenAccount>,  
+    pub token_program: Program<'info, Token>,
+    pub mint_address: Box<Account<'info, Mint>>,
+    pub system_program: Program<'info, System>, 
+}
 
+#[derive(Accounts)]
+#[instruction(pool_names: Vec<u8>, pool_total: Vec<f64>)]
+pub struct SelectWinningPool<'info> {
+    pub clock: Sysvar<'info, Clock>,
 }
 
 #[derive(Accounts)]
@@ -456,7 +479,7 @@ pub struct CreatePool<'info> {
     #[account(
         init,
         payer = owner,
-        seeds = [b"pool_wallet".as_ref(), pool_name.as_ref()],
+        seeds = [b"pool_wallet".as_ref()],
         bump,
         token::mint = mint_address,
         token::authority = pool,
@@ -493,8 +516,8 @@ impl TransactionType {
         match val {
             1 => Ok(TransactionType::Deposit),
             2 => Ok(TransactionType::Withdrawal),
-            unknown_value => {
-                msg!("Unknown transaction type: {}", unknown_value);
+            _ => {
+                msg!("Unknown transaction type: {}", val);
                 Err(ErrorCode::TransactionTypeUnknown.into())
             }
         }
@@ -525,6 +548,7 @@ impl Pools {
             2 => "BNB".to_string(),
             3 => "Polygon".to_string(),
             4 => "Ethereum".to_string(),
+            _ => "".to_string(),
         }
     }
 
@@ -556,7 +580,6 @@ pub struct Pool {
     pub is_initialized: bool,
     pub last_update_timestamp: i64,
     pub total_deposit: f64,
-    pub total_prize: f64,
     pub user_count: u64,
     pub name: u8,
 }
@@ -568,6 +591,7 @@ pub struct Game {
     pub end_time: i64,
     pub winning_pool: u8,
     pub winning_amount: f64,
+    pub total_prize: f64,
 }
 
 #[account]
