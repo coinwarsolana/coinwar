@@ -43,22 +43,19 @@ fn transfer_token_out_of_pool<'info>(
         transfer_instruction,
         outer.as_slice(),
     );
-    anchor_spl::token::transfer(cpi_ctx, amount)?;
-    Ok(())
+    return anchor_spl::token::transfer(cpi_ctx, amount);
 }
 
 #[program]
 pub mod coin_war {
     use std::vec;
 
-    use anchor_lang::accounts;
-
     use super::*;
 
-    const INITIAL_POOL_PRIZE: f64 = 100.00; 
     const GAME_DURATION_IN_DAYS: i64 = 5;
-    const GAME_DURATION_IN_SECS: i64 = GAME_DURATION_IN_DAYS * 24 * 60 * 60;
-    const JACKPOT_WINNER_PERCENTAGE: u64 = 10;
+    // const INITIAL_POOL_PRIZE: f64 = 100.00; 
+    // const GAME_DURATION_IN_SECS: i64 = GAME_DURATION_IN_DAYS * 24 * 60 * 60;
+    // const JACKPOT_WINNER_PERCENTAGE: u64 = 10;
 
     // Create a pool. This needs to be called once for each of the pools defined in enum Pools.
     pub fn create_pool(ctx: Context<CreatePool>, pool_name: u8) -> Result<()> {
@@ -75,26 +72,36 @@ pub mod coin_war {
         Ok(())
     }
 
-    // Create a game. This needs to be called once.
-    pub fn create_game(ctx: Context<CreateGame>, start_time: i64, end_time: i64, pool_name: u8) -> Result<()> {
-        let pool = Pools::from(pool_name)?;
-        let game = &mut ctx.accounts.game;
-        game.start_time = start_time;
-        game.end_time = end_time;
-        game.winning_pool = pool.to_code();
-        game.winning_amount = INITIAL_POOL_PRIZE;
+    pub fn create_user(ctx: Context<CreateUser>) -> Result<()> {
+        let user = &mut ctx.accounts.user;
+        user.balance = 0.0;
+        user.current_average_balance = 0.0;
+        user.current_weighted_balance = 0.0;
+        user.current_weighted_days = GAME_DURATION_IN_DAYS;
 
         Ok(())
     }
+
+    // Create a game. This needs to be called once.
+    // pub fn create_game(ctx: Context<CreateGame>, start_time: i64, end_time: i64, pool_name: u8) -> Result<()> {
+    //     let pool = Pools::from(pool_name)?;
+    //     let game = &mut ctx.accounts.game;
+    //     game.start_time = start_time;
+    //     game.end_time = end_time;
+    //     game.winning_pool = pool.to_code();
+    //     game.winning_amount = INITIAL_POOL_PRIZE;
+
+    //     Ok(())
+    // }
 
     // Set every user average balance to the balance
-    pub fn reset_user_average_balance(ctx: Context<ResetUserAverageBalance>) -> Result<()> {
-        let user = &mut ctx.accounts.user;
-        user.current_weighted_days = 7;
-        user.current_weighted_balance = user.balance.clone();
-        user.current_average_balance = user.balance.clone();
-        Ok(())
-    }
+    // pub fn reset_user_average_balance(ctx: Context<ResetUserAverageBalance>) -> Result<()> {
+    //     let user = &mut ctx.accounts.user;
+    //     user.current_weighted_days = GAME_DURATION_IN_DAYS;
+    //     user.current_weighted_balance = user.balance.clone();
+    //     user.current_average_balance = user.balance.clone();
+    //     Ok(())
+    // }
 
     // Create new Game Account
     // pub fn start_game(ctx: Context<StartGame>, new_game_id: u64) -> Result<()> {
@@ -121,6 +128,14 @@ pub mod coin_war {
 
     // Perform weighted randomized selection out of the 4 pools
     pub fn select_winning_pool(ctx: Context<SelectWinningPool>, pool_names: Vec<u8>, pool_total: Vec<f64>) -> Result<String> {
+        // check to see if the parameters are correct
+        require!(pool_names.len() == pool_total.len(), ErrorCode::PoolsInWrongOrder);
+        require!(Pools::Solana.to_code() == pool_names[0], ErrorCode::PoolsInWrongOrder);
+        require!(Pools::BNB.to_code() == pool_names[1], ErrorCode::PoolsInWrongOrder);
+        require!(Pools::Polygon.to_code() == pool_names[2], ErrorCode::PoolsInWrongOrder);
+        require!(Pools::Ethereum.to_code() == pool_names[3], ErrorCode::PoolsInWrongOrder);
+
+        // generate random winnning pool represented by number from 0 - 99
         let time_stamp = &mut ctx.accounts.clock.unix_timestamp.clone();
         let time_stamp_string = time_stamp.to_string();
         let time_stamp_chars = &mut time_stamp_string.chars();
@@ -128,7 +143,8 @@ pub mod coin_war {
         let second_digit = time_stamp_chars.nth(time_stamp_chars.clone().count() - 2).unwrap();
         let digits_array = [first_digit, second_digit];
         let s: String = digits_array.iter().collect();
-        let winning_pool_index: u64 = s.parse().unwrap();
+        let winning_pool_random: u64 = s.parse().unwrap();
+        let winning_pool_index = winning_pool_random + 1;
 
         // we divide the slots by the order defined in Pools enum Solana, BNB, Polygon, Ethereum with relative weights
         let total: f64 = pool_total.iter().sum();
@@ -147,9 +163,8 @@ pub mod coin_war {
             }
         }
 
-        // TODO: Need to check the order of pool_names to make sure it matches the Pools enum
         winning_index += 1;
-        let mut winning_pool: String = Pools::code_to_string(winning_index as u8);
+        let winning_pool: String = Pools::code_to_string(winning_index as u8);
 
         Ok(winning_pool)
     }   
@@ -168,7 +183,27 @@ pub mod coin_war {
 
     // Calculate percent of the pool the user balance represents and pay out according
     // Takes in one user at a time
-    pub fn pay_winning_pool_user(ctx: Context<PayWinner>) -> Result<()> {
+    pub fn pay_winning_pool_user(ctx: Context<PayWinner>, pool_name: String, prize_amount: f64) -> Result<()> {
+        let total_deposit = ctx.accounts.pool.total_deposit.clone();
+        let user_balance = ctx.accounts.user.balance.clone();
+        let percentage_of_pool = user_balance / total_deposit;
+        let prize = percentage_of_pool * prize_amount;
+
+        let result = transfer_token_out_of_pool(
+            &mut ctx.accounts.pool_token_account, 
+            ctx.accounts.token_program.to_account_info(), 
+            ctx.accounts.user_token_account.to_account_info(), 
+            ctx.accounts.owner.to_account_info(), 
+            pool_name, 
+            prize as u64);
+
+        if result.is_ok() {
+            // reset user balances
+            let user = &mut ctx.accounts.user;
+            user.current_average_balance = user.balance.clone();
+            user.current_weighted_balance = user.balance.clone();
+            user.current_weighted_days = GAME_DURATION_IN_DAYS;
+        }
 
         Ok(())
     }
@@ -186,32 +221,19 @@ pub mod coin_war {
         let pool_number = pool.name;
         let pool_name : String = Pools::code_to_string(pool_number);
 
-        transfer_token_out_of_pool(
+        // Check if theres enough money
+        let user_balance = ctx.accounts.user.balance.clone();
+        require!(user_balance < amount, ErrorCode::InsufficientBalance); 
+
+        let result = transfer_token_out_of_pool(
             &mut ctx.accounts.pool_token_account, 
             ctx.accounts.token_program.to_account_info(), 
             ctx.accounts.user_token_account.to_account_info(), 
             ctx.accounts.initializer.to_account_info(), 
             pool_name, 
             amount as u64);
-        // Transfer from pool wallet to user wallet
-        // let inner = vec![b"pool_wallet".as_ref(), pool_name.as_ref()];
-        // let outer = vec![inner.as_slice()];
 
-        // Transfer amount from pool wallet to user wallet
-        // let cpi_accounts = Transfer {
-        //     from: ctx.accounts.pool_token_account.to_account_info().clone(), // user wallet
-        //     to: ctx.accounts.user_token_account.to_account_info().clone(), // pool wallet
-        //     authority: ctx.accounts.initializer.to_account_info().clone(),
-        // };
-
-        // token::transfer(
-        //     CpiContext::new_with_signer(
-        //         ctx.accounts.token_program.to_account_info().clone(), 
-        //         cpi_accounts, 
-        //         outer.as_slice()
-        //     ),
-        //     amount as u64
-        // )?;
+        require!(result.is_ok(), ErrorCode::PaymentFailed);
 
         // Update user balance
         let user = &mut ctx.accounts.user;
@@ -314,27 +336,27 @@ pub mod coin_war {
 //     pub system_program: Program<'info, System>,
 // }
 
-#[derive(Accounts)]
-#[instruction(game_id: u64)]
-pub struct EndGame<'info> {
-    // TODO: add constraint = owner.key() == OWNER
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    #[account(mut, seeds = [b"game".as_ref(), &game_id.to_be_bytes()], bump)]
-    pub game: Account<'info, Game>,
-    pub system_program: Program<'info, System>,
-}
+// #[derive(Accounts)]
+// #[instruction(game_id: u64)]
+// pub struct EndGame<'info> {
+//     // TODO: add constraint = owner.key() == OWNER
+//     #[account(mut)]
+//     pub owner: Signer<'info>,
+//     #[account(mut, seeds = [b"game".as_ref(), &game_id.to_be_bytes()], bump)]
+//     pub game: Account<'info, Game>,
+//     pub system_program: Program<'info, System>,
+// }
 
-#[derive(Accounts)]
-#[instruction(start_time: i64, end_time: i64)]
-pub struct CreateGame<'info> {
-    // TODO: add constraint = owner.key() == OWNER
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    #[account(init, payer = owner, space = Game::LEN)]
-    pub game: Account<'info, Game>,
-    pub system_program: Program<'info, System>,
-}
+// #[derive(Accounts)]
+// #[instruction(start_time: i64, end_time: i64)]
+// pub struct CreateGame<'info> {
+//     // TODO: add constraint = owner.key() == OWNER
+//     #[account(mut)]
+//     pub owner: Signer<'info>,
+//     #[account(init, payer = owner, space = Game::LEN)]
+//     pub game: Account<'info, Game>,
+//     pub system_program: Program<'info, System>,
+// }
 
 #[derive(Accounts)]
 #[instruction(amount: f64, pool_name: String)]
@@ -410,9 +432,10 @@ pub struct Deposit<'info> {
 pub struct PayWinner<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
-    #[account(seeds = [b"user".as_ref(), user_key.as_ref()], bump)]
+    #[account(mut, seeds = [b"user".as_ref(), user_key.as_ref()], bump)]
     pub user: Account<'info, User>,
     #[account(
+        mut,
         seeds = [b"user_wallet".as_ref(), user_key.as_ref()],
         bump
     )]
@@ -442,7 +465,12 @@ pub struct SelectWinningPool<'info> {
 pub struct CreateUser<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
-    #[account(init, payer = initializer, space = User::LEN, seeds = [b"user".as_ref(), initializer.key().as_ref()], bump)]
+    #[account(
+        init, 
+        payer = initializer, 
+        space = User::LEN, 
+        seeds = [b"user".as_ref(), initializer.key().as_ref()], 
+        bump)]
     pub user: Account<'info, User>,
     #[account(
         init,
@@ -630,13 +658,11 @@ pub struct User {
 }
 
 const DISCRIMINATOR: usize = 8;
-const PUBLIC_KEY: usize = 32;
 const TIMESTAMP: usize = 8;
 const AMOUNT: usize = 8;
 const COUNT: usize = 8;
 const STRING_PREFIX: usize = 4; // Stores the size of the string
 const POOL: usize = 20 * 4; // 20 chars max.
-const U64: usize = 32;
 
 // Calculate space for User Account
 impl User {
@@ -656,18 +682,6 @@ impl Transaction {
         + AMOUNT
         + TIMESTAMP 
         + STRING_PREFIX;
-
-        fn get_type(key: String) -> String {
-            let mut txn_types: HashMap<String, String> = HashMap::new();
-            txn_types.insert(String::from("deposit"), String::from("Deposit"));
-            txn_types.insert(String::from("Deposit"), String::from("Deposit"));
-            txn_types.insert(String::from("withdrawal"), String::from("Withdrawal"));
-            txn_types.insert(String::from("Withdrawal"), String::from("Withdrawal"));
-            if txn_types.contains_key(&key) {
-                return key;
-            }
-            return "".to_string();
-        }
 }
 // TODO: Calculate space for UserGameHistory Account
 // TODO: Calculate space for GameHistory Account
@@ -695,6 +709,8 @@ impl Game {
 pub enum ErrorCode {
     #[msg("You have no balance in the pool to withdraw.")]
     InvalidWithdrawal,
+    #[msg("You have insufficient balance for this withdrawal.")]
+    InsufficientBalance,
     #[msg("You can only contribute to one pool at a time.")]
     MultiplePoolNotAllowed,
     #[msg("This pool has already been created.")]
@@ -705,4 +721,8 @@ pub enum ErrorCode {
     TransactionTypeUnknown,
     #[msg("Unknown pool.")]
     PoolUnknown,
+    #[msg("Payment failed.")]
+    PaymentFailed,
+    #[msg("Pools in wrong order.")]
+    PoolsInWrongOrder,
 }
