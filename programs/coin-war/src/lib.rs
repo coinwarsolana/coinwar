@@ -82,39 +82,6 @@ pub mod coin_war {
         Ok(())
     }
 
-    // Create a game. This needs to be called once.
-    // pub fn create_game(ctx: Context<CreateGame>, start_time: i64, end_time: i64, pool_name: u8) -> Result<()> {
-    //     let pool = Pools::from(pool_name)?;
-    //     let game = &mut ctx.accounts.game;
-    //     game.start_time = start_time;
-    //     game.end_time = end_time;
-    //     game.winning_pool = pool.to_code();
-    //     game.winning_amount = INITIAL_POOL_PRIZE;
-
-    //     Ok(())
-    // }
-
-    // Set every user average balance to the balance
-    // pub fn reset_user_average_balance(ctx: Context<ResetUserAverageBalance>) -> Result<()> {
-    //     let user = &mut ctx.accounts.user;
-    //     user.current_weighted_days = GAME_DURATION_IN_DAYS;
-    //     user.current_weighted_balance = user.balance.clone();
-    //     user.current_average_balance = user.balance.clone();
-    //     Ok(())
-    // }
-
-    // Create new Game Account
-    // pub fn start_game(ctx: Context<StartGame>, new_game_id: u64) -> Result<()> {
-    //     let clock: Clock = Clock::get().unwrap();
-    //     let game = &mut ctx.accounts.game;
-    //     game.game_id = new_game_id;
-    //     game.start_time = clock.unix_timestamp;
-    //     game.end_time = clock.unix_timestamp + GAME_DURATION_IN_SECS;
-    //     game.winning_amount = 0.0;
-    //     game.winning_pool = 0;
-    //     Ok(())
-    // }
-
     // Tally up total for all the pools, pick the pool with the average prediction closest to the actual prediction
     // Calculate the total prize (interest)
     // Take 80% of total interest as the prize. Pick one winner for 10% of the prize
@@ -181,18 +148,6 @@ pub mod coin_war {
         Ok(winning_pool)
     }   
 
-
-    // Return a random number from 1 - count of user in pool
-    // pub fn select_winner_from_winning_pool(ctx: Context<SelectWinnerFromPool>total_pool_user_count: u64) -> Result<()> {
-    //     Ok(())
-    // }
-
-    // Input: user from select_winner_from_winning_pool
-    // Pay user 10% of the winnings 
-    // pub fn pay_winner(ct: Context<PayWinner>) -> Result<(<u64 winner_index>)> {
-    //     Ok(())
-    // }
-
     // Calculate percent of the pool the user balance represents and pay out according
     // Takes in one user at a time
     pub fn pay_winning_pool_user(ctx: Context<PayWinner>, pool_name: String, prize_amount: f64) -> Result<()> {
@@ -239,6 +194,7 @@ pub mod coin_war {
     // Transfer from pool wallet to user wallet
     // Update user balance
     // Update pool balance
+    // Update prediction
     // Update pool count if needed
     // Update average balance for user
     // Create new transaction
@@ -299,6 +255,7 @@ pub mod coin_war {
 
     // Transfer from pool wallet to user wallet
     // Update user balance
+    // Update prediction
     // Update pool balance
     // Zero out average balance?
     pub fn deposit(ctx: Context<Deposit>, amount: f64, prediction: f64) -> Result<()> {
@@ -367,39 +324,6 @@ pub mod coin_war {
         Ok(())
     }
 }
-
-
-// #[derive(Accounts)]
-// #[instruction(new_game_id: u64)]
-// pub struct StartGame<'info> {
-//     #[account(mut)]
-//     pub owner: Signer<'info>,
-//     #[account(init, payer = owner, space = Pool::LEN, seeds = [b"game".as_ref(), &new_game_id.to_be_bytes()], bump)]
-//     pub game: Account<'info, Game>,
-//     pub system_program: Program<'info, System>,
-// }
-
-// #[derive(Accounts)]
-// #[instruction(game_id: u64)]
-// pub struct EndGame<'info> {
-//     // TODO: add constraint = owner.key() == OWNER
-//     #[account(mut)]
-//     pub owner: Signer<'info>,
-//     #[account(mut, seeds = [b"game".as_ref(), &game_id.to_be_bytes()], bump)]
-//     pub game: Account<'info, Game>,
-//     pub system_program: Program<'info, System>,
-// }
-
-// #[derive(Accounts)]
-// #[instruction(start_time: i64, end_time: i64)]
-// pub struct CreateGame<'info> {
-//     // TODO: add constraint = owner.key() == OWNER
-//     #[account(mut)]
-//     pub owner: Signer<'info>,
-//     #[account(init, payer = owner, space = Game::LEN)]
-//     pub game: Account<'info, Game>,
-//     pub system_program: Program<'info, System>,
-// }
 
 #[derive(Accounts)]
 #[instruction(amount: f64, pool_name: String)]
@@ -577,24 +501,6 @@ impl TransactionType {
             TransactionType::Withdrawal => 2,
         }
     }
-
-    fn to_string(&self) -> String {
-        match self {
-            TransactionType::Deposit => "Deposit".to_string(),
-            TransactionType::Withdrawal => "Withdrawal".to_string(),
-        }
-    }
-
-    fn from(val: u8) -> std::result::Result<TransactionType, Error> {
-        match val {
-            1 => Ok(TransactionType::Deposit),
-            2 => Ok(TransactionType::Withdrawal),
-            _ => {
-                msg!("Unknown transaction type: {}", val);
-                Err(ErrorCode::TransactionTypeUnknown.into())
-            }
-        }
-    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -622,15 +528,6 @@ impl Pools {
             3 => "Polygon".to_string(),
             4 => "Ethereum".to_string(),
             _ => "".to_string(),
-        }
-    }
-
-    fn to_string(&self) -> String {
-        match self {
-            Pools::Solana => "Solana".to_string(),
-            Pools::BNB => "BNB".to_string(),
-            Pools::Polygon => "Polygon".to_string(),
-            Pools::Ethereum => "Ethereum".to_string(),
         }
     }
 
@@ -676,20 +573,6 @@ pub struct Transaction {
 }
 
 #[account]
-pub struct UserGameHistory {
-    pub game_id: u64,
-    pub winning: f64,
-    pub user_id: u64,
-}
-
-#[account]
-pub struct GameHistory {
-    pub game_id: u64,
-    pub winning_pool: u8,
-    pub winning: f64
-}
-
-#[account]
 pub struct User {
     pub pool: u8,
     pub last_prediction: f64,
@@ -730,8 +613,6 @@ impl Transaction {
         + TIMESTAMP 
         + STRING_PREFIX;
 }
-// TODO: Calculate space for UserGameHistory Account
-// TODO: Calculate space for GameHistory Account
 
 // Calculate space for Pool Account
 impl Pool {
@@ -741,15 +622,6 @@ impl Pool {
         + AMOUNT
         + AMOUNT
         + COUNT;
-}
-
-// Calculate space for Game Account
-impl Game {
-    const LEN: usize = DISCRIMINATOR
-        + TIMESTAMP
-        + TIMESTAMP 
-        + STRING_PREFIX + POOL
-        + AMOUNT;
 }
 
 #[error_code]
