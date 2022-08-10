@@ -1,10 +1,8 @@
-use anchor_lang::solana_program::pubkey;
 use anchor_spl::associated_token::AssociatedToken;
 use solana_program::pubkey::Pubkey;
 use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::token::{TokenAccount, Transfer, Token, Mint};
 use anchor_spl::token;
-use std::collections::HashMap;
 
 declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
 // TODO: Create pubkey for owner program and each of the four pool wallets
@@ -68,6 +66,7 @@ pub mod coin_war {
         pool.total_deposit = 0.00;
         pool.user_count = 0;
         pool.name = pool_enum.to_code();
+        pool.average_prediction = 0.0;
 
         Ok(())
     }
@@ -78,6 +77,7 @@ pub mod coin_war {
         user.current_average_balance = 0.0;
         user.current_weighted_balance = 0.0;
         user.current_weighted_days = GAME_DURATION_IN_DAYS;
+        user.last_prediction = 0.0;
 
         Ok(())
     }
@@ -115,7 +115,7 @@ pub mod coin_war {
     //     Ok(())
     // }
 
-    // Tally up total for all the pools, and perform a weighted randomized selection for a winner
+    // Tally up total for all the pools, pick the pool with the average prediction closest to the actual prediction
     // Calculate the total prize (interest)
     // Take 80% of total interest as the prize. Pick one winner for 10% of the prize
     // Distribute prize to the one big winner
@@ -127,41 +127,53 @@ pub mod coin_war {
     // pay_winner(), pay_winning_pool_user(), end_game()
 
     // Perform weighted randomized selection out of the 4 pools
-    pub fn select_winning_pool(ctx: Context<SelectWinningPool>, pool_names: Vec<u8>, pool_total: Vec<f64>) -> Result<String> {
+    pub fn select_winning_pool(ctx: Context<SelectWinningPool>, pool_names: Vec<u8>, pool_predictions: Vec<f64>, pool_coin_price: Vec<f64>) -> Result<String> {
         // check to see if the parameters are correct
-        require!(pool_names.len() == pool_total.len(), ErrorCode::PoolsInWrongOrder);
+        require!(pool_names.len() == pool_predictions.len(), ErrorCode::PoolsDataSizeDoNotMatch);
+        require!(pool_predictions.len() == pool_coin_price.len(), ErrorCode::PoolsDataSizeDoNotMatch);
         require!(Pools::Solana.to_code() == pool_names[0], ErrorCode::PoolsInWrongOrder);
         require!(Pools::BNB.to_code() == pool_names[1], ErrorCode::PoolsInWrongOrder);
         require!(Pools::Polygon.to_code() == pool_names[2], ErrorCode::PoolsInWrongOrder);
         require!(Pools::Ethereum.to_code() == pool_names[3], ErrorCode::PoolsInWrongOrder);
 
         // generate random winnning pool represented by number from 0 - 99
-        let time_stamp = &mut ctx.accounts.clock.unix_timestamp.clone();
-        let time_stamp_string = time_stamp.to_string();
-        let time_stamp_chars = &mut time_stamp_string.chars();
-        let first_digit = time_stamp_chars.last().unwrap();
-        let second_digit = time_stamp_chars.nth(time_stamp_chars.clone().count() - 2).unwrap();
-        let digits_array = [first_digit, second_digit];
-        let s: String = digits_array.iter().collect();
-        let winning_pool_random: u64 = s.parse().unwrap();
-        let winning_pool_index = winning_pool_random + 1;
+        // let time_stamp = &mut ctx.accounts.clock.unix_timestamp.clone();
+        // let time_stamp_string = time_stamp.to_string();
+        // let time_stamp_chars = &mut time_stamp_string.chars();
+        // let first_digit = time_stamp_chars.last().unwrap();
+        // let second_digit = time_stamp_chars.nth(time_stamp_chars.clone().count() - 2).unwrap();
+        // let digits_array = [first_digit, second_digit];
+        // let s: String = digits_array.iter().collect();
+        // let winning_pool_random: u64 = s.parse().unwrap();
+        // let winning_pool_index = winning_pool_random + 1;        
 
         // we divide the slots by the order defined in Pools enum Solana, BNB, Polygon, Ethereum with relative weights
-        let total: f64 = pool_total.iter().sum();
-        let mut pool_weights: Vec<u64> = Vec::new();
-        for i in 0..pool_total.len() {
-            let mut running_total: f64 = 0.0;
-            let pool_weight = pool_total[i] / total;
-            running_total += pool_weight;
-            pool_weights.push(running_total as u64);
-        }
+        // let total: f64 = pool_total.iter().sum();
+        // let mut pool_weights: Vec<u64> = Vec::new();
+        // for i in 0..pool_total.len() {
+        //     let mut running_total: f64 = 0.0;
+        //     let pool_weight = pool_total[i] / total;
+        //     running_total += pool_weight;
+        //     pool_weights.push(running_total as u64);
+        // }
+        // let mut winning_index = 0;
+        // for j in 0..pool_weights.len() {
+        //     if winning_pool_index <= pool_weights[j] {
+        //         winning_index = j;
+        //         break;
+        //     }
+        // }
+
+        // choose the pool_predictions with the smallest % delta to pool_coin_prices and mark as winning index
         let mut winning_index = 0;
-        for j in 0..pool_weights.len() {
-            if winning_pool_index <= pool_weights[j] {
-                winning_index = j;
-                break;
+        let mut current_smallest_delta = 100000.000;
+        for i in 0..pool_predictions.len() {
+            let delta = (pool_predictions[i] - pool_coin_price[i]).abs();
+            if delta < current_smallest_delta {
+                current_smallest_delta = delta;
+                winning_index = i;
             }
-        }
+        }    
 
         winning_index += 1;
         let winning_pool: String = Pools::code_to_string(winning_index as u8);
@@ -203,7 +215,23 @@ pub mod coin_war {
             user.current_average_balance = user.balance.clone();
             user.current_weighted_balance = user.balance.clone();
             user.current_weighted_days = GAME_DURATION_IN_DAYS;
+            user.last_prediction = 0.0;
         }
+
+        Ok(())
+    }
+    
+    // Allow user to update prediction (especially when a new game starts)
+    pub fn make_prediction(ctx: Context<MakePrediction>, prediction: f64) -> Result<()> {
+        let user = &mut ctx.accounts.user;
+        let pool = &mut ctx.accounts.pool;
+        
+        // Remove previous prediction and update
+        let total_prediction = pool.average_prediction * pool.user_count as f64;
+
+        let new_total_prediction = total_prediction - user.last_prediction + prediction;
+        user.last_prediction = prediction;
+        pool.average_prediction = new_total_prediction / pool.user_count as f64;
 
         Ok(())
     }
@@ -243,10 +271,17 @@ pub mod coin_war {
         let pool = &mut ctx.accounts.pool;
         pool.total_deposit = pool.total_deposit - amount;
 
+        // Remove previous prediction and update
+        let total_prediction = pool.average_prediction * pool.user_count as f64;
+
         // Update pool count if needed
         if user.balance <= 0.0 {
             pool.user_count -= 1;
         }
+
+        let new_total_prediction = total_prediction - user.last_prediction;
+        user.last_prediction = 0.0;
+        pool.average_prediction = new_total_prediction / pool.user_count as f64;
 
         // Update average balance for user (user average balance is reset to current balance)
         user.current_average_balance = user.balance;
@@ -266,7 +301,7 @@ pub mod coin_war {
     // Update user balance
     // Update pool balance
     // Zero out average balance?
-    pub fn deposit(ctx: Context<Deposit>, amount: f64) -> Result<()> {
+    pub fn deposit(ctx: Context<Deposit>, amount: f64, prediction: f64) -> Result<()> {
         let clock: Clock = Clock::get().unwrap();
         let user = &mut ctx.accounts.user;
         let key = user.key();
@@ -309,11 +344,19 @@ pub mod coin_war {
         let pool = &mut ctx.accounts.pool;
         pool.total_deposit = pool.total_deposit + amount;
 
+        
+        // Remove previous prediction and update
+        let total_prediction = pool.average_prediction * pool.user_count as f64;
+
         // Update pool count if user not in pool
         if user.pool == 0 || user.pool.ne(&pool.name) {
             user.pool = pool.name.clone();
             pool.user_count += 1;
-        } 
+        }
+
+        let new_total_prediction = total_prediction - user.last_prediction + prediction;
+        user.last_prediction = prediction;
+        pool.average_prediction = new_total_prediction / pool.user_count as f64;
 
         // Create new transaction
         let transaction = &mut ctx.accounts.transaction;
@@ -393,7 +436,7 @@ pub struct Withdraw<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(amount: f64, pool_name: String)]
+#[instruction(amount: f64, pool_name: String, prediction: f64)]
 pub struct Deposit<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
@@ -456,6 +499,17 @@ pub struct PayWinner<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(pool_name: String, prediction: f64)]
+pub struct MakePrediction<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(mut, seeds = [b"user".as_ref(), owner.key().as_ref()], bump)]
+    pub user: Account<'info, User>,
+    #[account(mut, seeds = [pool_name.as_ref()], bump)]
+    pub pool: Account<'info, Pool>,
+}
+
+#[derive(Accounts)]
 #[instruction(pool_names: Vec<u8>, pool_total: Vec<f64>)]
 pub struct SelectWinningPool<'info> {
     pub clock: Sysvar<'info, Clock>,
@@ -485,15 +539,6 @@ pub struct CreateUser<'info> {
     pub mint_address: Box<Account<'info, Mint>>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
-}
-
-#[derive(Accounts)]
-pub struct ResetUserAverageBalance<'info> {
-    #[account(mut)]
-    pub initializer: Signer<'info>,
-    #[account(init, payer = initializer, space = User::LEN, seeds = [b"user".as_ref(), initializer.key().as_ref()], bump)]
-    pub user: Account<'info, User>,
-    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -610,6 +655,7 @@ pub struct Pool {
     pub total_deposit: f64,
     pub user_count: u64,
     pub name: u8,
+    pub average_prediction: f64,
 }
 
 #[account]
@@ -646,6 +692,7 @@ pub struct GameHistory {
 #[account]
 pub struct User {
     pub pool: u8,
+    pub last_prediction: f64,
     pub balance: f64,
     // used to read UserGameHistory
     pub last_active: i64,
@@ -725,4 +772,6 @@ pub enum ErrorCode {
     PaymentFailed,
     #[msg("Pools in wrong order.")]
     PoolsInWrongOrder,
+    #[msg("Pool data sizes do not match.")]
+    PoolsDataSizeDoNotMatch,
 }
