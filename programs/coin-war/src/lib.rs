@@ -18,6 +18,12 @@ declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
  * increase the average balance.
  */
 
+
+fn to_long<'info>(amount: f64) -> u64 {
+    let mint_decimals = 9;
+    return (amount * f64::powf(10., mint_decimals.into())) as u64;
+}
+
 // utility function to send tokens out of pool wallets
 fn transfer_token_out_of_pool<'info>(
     pool_wallet: &mut Account<'info, TokenAccount>,
@@ -51,6 +57,7 @@ pub mod coin_war {
     use super::*;
 
     const GAME_DURATION_IN_DAYS: i64 = 5;
+    const MINIMUM_DEPOSIT: f64 = 1.00;
     // const INITIAL_POOL_PRIZE: f64 = 100.00; 
     // const GAME_DURATION_IN_SECS: i64 = GAME_DURATION_IN_DAYS * 24 * 60 * 60;
     // const JACKPOT_WINNER_PERCENTAGE: u64 = 10;
@@ -259,6 +266,7 @@ pub mod coin_war {
     // Update pool balance
     // Zero out average balance?
     pub fn deposit(ctx: Context<Deposit>, amount: f64, prediction: f64) -> Result<()> {
+        require!(amount >= MINIMUM_DEPOSIT, ErrorCode::DepositInsufficient);
         let clock: Clock = Clock::get().unwrap();
         let user = &mut ctx.accounts.user;
         let key = user.key();
@@ -646,4 +654,6 @@ pub enum ErrorCode {
     PoolsInWrongOrder,
     #[msg("Pool data sizes do not match.")]
     PoolsDataSizeDoNotMatch,
+    #[msg("Minimum Deposit amount is 1 sol.")]
+    DepositInsufficient,
 }
