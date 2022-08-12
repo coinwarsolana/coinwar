@@ -1,0 +1,556 @@
+{
+  "version": "0.1.0",
+  "name": "coin_war",
+  "instructions": [
+    {
+      "name": "createPool",
+      "accounts": [
+        {
+          "name": "owner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "pool",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "poolTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "mintAddress",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "rent",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "poolName",
+          "type": "u8"
+        }
+      ],
+      "returns": null
+    },
+    {
+      "name": "createUser",
+      "accounts": [
+        {
+          "name": "initializer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "mintAddress",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "rent",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [],
+      "returns": null
+    },
+    {
+      "name": "selectWinningPool",
+      "accounts": [
+        {
+          "name": "clock",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "poolNames",
+          "type": "bytes"
+        },
+        {
+          "name": "poolPredictions",
+          "type": {
+            "vec": "f64"
+          }
+        },
+        {
+          "name": "poolCoinPrice",
+          "type": {
+            "vec": "f64"
+          }
+        }
+      ],
+      "returns": "string"
+    },
+    {
+      "name": "payWinningPoolUser",
+      "accounts": [
+        {
+          "name": "owner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "pool",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "poolTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "mintAddress",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "poolName",
+          "type": "string"
+        },
+        {
+          "name": "prizeAmount",
+          "type": "f64"
+        }
+      ],
+      "returns": null
+    },
+    {
+      "name": "makePrediction",
+      "accounts": [
+        {
+          "name": "owner",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "pool",
+          "isMut": true,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "prediction",
+          "type": "f64"
+        }
+      ],
+      "returns": null
+    },
+    {
+      "name": "withdraw",
+      "accounts": [
+        {
+          "name": "initializer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userTokenAccount",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "pool",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "poolTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "transaction",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "mintAddress",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "associatedTokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "rent",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "f64"
+        }
+      ],
+      "returns": null
+    },
+    {
+      "name": "deposit",
+      "accounts": [
+        {
+          "name": "initializer",
+          "isMut": true,
+          "isSigner": true
+        },
+        {
+          "name": "user",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "userTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "pool",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "poolTokenAccount",
+          "isMut": true,
+          "isSigner": false
+        },
+        {
+          "name": "tokenProgram",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "mintAddress",
+          "isMut": false,
+          "isSigner": false
+        },
+        {
+          "name": "systemProgram",
+          "isMut": false,
+          "isSigner": false
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "f64"
+        },
+        {
+          "name": "prediction",
+          "type": "f64"
+        }
+      ],
+      "returns": null
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "isInitialized",
+            "type": "bool"
+          },
+          {
+            "name": "lastUpdateTimestamp",
+            "type": "i64"
+          },
+          {
+            "name": "totalDeposit",
+            "type": "f64"
+          },
+          {
+            "name": "userCount",
+            "type": "u64"
+          },
+          {
+            "name": "name",
+            "type": "u8"
+          },
+          {
+            "name": "averagePrediction",
+            "type": "f64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Game",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "gameId",
+            "type": "u64"
+          },
+          {
+            "name": "startTime",
+            "type": "i64"
+          },
+          {
+            "name": "endTime",
+            "type": "i64"
+          },
+          {
+            "name": "winningPool",
+            "type": "u8"
+          },
+          {
+            "name": "winningAmount",
+            "type": "f64"
+          },
+          {
+            "name": "totalPrize",
+            "type": "f64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Transaction",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "amount",
+            "type": "f64"
+          },
+          {
+            "name": "transactionType",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "User",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "u8"
+          },
+          {
+            "name": "lastPrediction",
+            "type": "f64"
+          },
+          {
+            "name": "balance",
+            "type": "f64"
+          },
+          {
+            "name": "lastActive",
+            "type": "i64"
+          },
+          {
+            "name": "gameHistoryCount",
+            "type": "u64"
+          },
+          {
+            "name": "currentAverageBalance",
+            "type": "f64"
+          },
+          {
+            "name": "currentWeightedBalance",
+            "type": "f64"
+          },
+          {
+            "name": "currentWeightedDays",
+            "type": "i64"
+          },
+          {
+            "name": "txnCount",
+            "type": "u64"
+          }
+        ]
+      }
+    }
+  ],
+  "types": [
+    {
+      "name": "TransactionType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Deposit"
+          },
+          {
+            "name": "Withdrawal"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pools",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Solana"
+          },
+          {
+            "name": "BNB"
+          },
+          {
+            "name": "Polygon"
+          },
+          {
+            "name": "Ethereum"
+          }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidWithdrawal",
+      "msg": "You have no balance in the pool to withdraw."
+    },
+    {
+      "code": 6001,
+      "name": "InsufficientBalance",
+      "msg": "You have insufficient balance for this withdrawal."
+    },
+    {
+      "code": 6002,
+      "name": "MultiplePoolNotAllowed",
+      "msg": "You can only contribute to one pool at a time."
+    },
+    {
+      "code": 6003,
+      "name": "PoolAlreadyCreated",
+      "msg": "This pool has already been created."
+    },
+    {
+      "code": 6004,
+      "name": "WalletToWithdrawFromInvalid",
+      "msg": "Wallet to withdraw from is not owned by owner."
+    },
+    {
+      "code": 6005,
+      "name": "TransactionTypeUnknown",
+      "msg": "Unknown transaction type."
+    },
+    {
+      "code": 6006,
+      "name": "PoolUnknown",
+      "msg": "Unknown pool."
+    },
+    {
+      "code": 6007,
+      "name": "PaymentFailed",
+      "msg": "Payment failed."
+    },
+    {
+      "code": 6008,
+      "name": "PoolsInWrongOrder",
+      "msg": "Pools in wrong order."
+    },
+    {
+      "code": 6009,
+      "name": "PoolsDataSizeDoNotMatch",
+      "msg": "Pool data sizes do not match."
+    },
+    {
+      "code": 6010,
+      "name": "DepositInsufficient",
+      "msg": "Minimum Deposit amount is 1 sol."
+    }
+  ],
+  "metadata": {
+    "address": "FNUYoJBy4jY3HqGJ6tFb8koxv9n3BjvqApgNBNpNjc9v"
+  }
+}
