@@ -1,13 +1,13 @@
 [features]
 seeds = false
-[programs.localnet]
-coin_war = "AQNeXDvz9BzvUwrspXeyMV8WUdu6HbyRyjj1SdKEkCbQ"
+[programs.devnet]
+coin_war = "FNUYoJBy4jY3HqGJ6tFb8koxv9n3BjvqApgNBNpNjc9v"
 
 [registry]
 url = "https://anchor.projectserum.com"
 
 [provider]
-cluster = "localnet"
+cluster = "devnet"
 wallet = "/Users/JoeyLin/.config/solana/id.json"
 
 [scripts]

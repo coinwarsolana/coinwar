@@ -4,7 +4,7 @@ use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::token::{TokenAccount, Transfer, Token, Mint};
 use anchor_spl::token;
 
-declare_id!("Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS");
+declare_id!("FNUYoJBy4jY3HqGJ6tFb8koxv9n3BjvqApgNBNpNjc9v");
 // TODO: Create pubkey for owner program and each of the four pool wallets
 // const OWNER: Pubkey = pubkey!("adfadsfsdafssdfadsfdsaffdafssddyuoiwdafdsaf"); // TODO: this needs to be public key of the program wallet
 
@@ -324,10 +324,10 @@ pub mod coin_war {
         pool.average_prediction = new_total_prediction / pool.user_count as f64;
 
         // Create new transaction
-        let transaction = &mut ctx.accounts.transaction;
-        transaction.amount = amount;
-        transaction.transaction_type = TransactionType::Deposit.to_code();
-        transaction.timestamp = clock.unix_timestamp;
+        // let transaction = &mut ctx.accounts.transaction;
+        // transaction.amount = amount;
+        // transaction.transaction_type = TransactionType::Deposit.to_code();
+        // transaction.timestamp = clock.unix_timestamp;
 
         Ok(())
     }
@@ -390,13 +390,6 @@ pub struct Deposit<'info> {
         bump,
     )]
     pub pool_token_account: Account<'info, TokenAccount>,   
-    #[account(
-        init, 
-        payer = initializer, 
-        space = Transaction::LEN, 
-        seeds = [b"tx".as_ref(), user.key().as_ref(), pool.key().as_ref(), &user.txn_count.to_be_bytes()] 
-        , bump)] 
-    pub transaction: Account<'info, Transaction>,
     pub token_program: Program<'info, Token>,
     pub mint_address: Box<Account<'info, Mint>>,
     pub system_program: Program<'info, System>,
@@ -489,7 +482,7 @@ pub struct CreatePool<'info> {
         token::mint = mint_address,
         token::authority = pool,
     )]
-    pub pool_token_acccount: Account<'info, TokenAccount>,
+    pub pool_token_account: Account<'info, TokenAccount>,
     pub mint_address: Box<Account<'info, Mint>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
