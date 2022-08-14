@@ -4,7 +4,7 @@ use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::token::{TokenAccount, Transfer, Token, Mint};
 use anchor_spl::token;
 
-declare_id!("2XvekLfJzVFdMimJhpbdp28Gde33i3Vn7wEaQDzt7vnY");
+declare_id!("9X5F3QKnsgsJyLe1hAco6XRxk9CYGt91mKuUAFgd1ihY");
 // TODO: Create pubkey for owner program and each of the four pool wallets
 // const OWNER: Pubkey = pubkey!("adfadsfsdafssdfadsfdsaffdafssddyuoiwdafdsaf"); // TODO: this needs to be public key of the program wallet
 
@@ -157,7 +157,7 @@ pub mod coin_war {
 
     // Calculate percent of the pool the user balance represents and pay out according
     // Takes in one user at a time
-    pub fn pay_winning_pool_user(ctx: Context<PayWinner>, pool_name: String, prize_amount: f64) -> Result<()> {
+    pub fn pay_winning_pool_user(ctx: Context<PayWinner>, user_key: Pubkey, pool_name: String, prize_amount: f64) -> Result<()> {
         let total_deposit = ctx.accounts.pool.total_deposit.clone();
         let user_balance = ctx.accounts.user.balance.clone();
         let percentage_of_pool = user_balance / total_deposit;
