@@ -1,7 +1,7 @@
 [features]
 seeds = false
 [programs.devnet]
-coin_war = "9X5F3QKnsgsJyLe1hAco6XRxk9CYGt91mKuUAFgd1ihY"
+coin_war = "9Qkcb9Va3RjChW8vwfyxZrTGdRQEYhr3kJpP4kMVTfE2"
 
 [registry]
 url = "https://anchor.projectserum.com"
