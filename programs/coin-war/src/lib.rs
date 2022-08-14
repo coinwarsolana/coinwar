@@ -4,7 +4,7 @@ use anchor_lang::{prelude::*, solana_program};
 use anchor_spl::token::{TokenAccount, Transfer, Token, Mint};
 use anchor_spl::token;
 
-declare_id!("FNUYoJBy4jY3HqGJ6tFb8koxv9n3BjvqApgNBNpNjc9v");
+declare_id!("2XvekLfJzVFdMimJhpbdp28Gde33i3Vn7wEaQDzt7vnY");
 // TODO: Create pubkey for owner program and each of the four pool wallets
 // const OWNER: Pubkey = pubkey!("adfadsfsdafssdfadsfdsaffdafssddyuoiwdafdsaf"); // TODO: this needs to be public key of the program wallet
 
