@@ -33,7 +33,7 @@ fn transfer_token_out_of_pool<'info>(
     pool_name: String,
     amount: u64
 ) -> Result<()> {
-    let inner = vec![b"pool_wallet".as_ref(), pool_name.as_ref()];
+    let inner = vec![b"pool_wallet".as_ref()];
     let outer = vec![inner.as_slice()];
 
     // Perform the actual transfer
@@ -101,10 +101,10 @@ pub mod coin_war {
     // pay_winner(), pay_winning_pool_user(), end_game()
 
     // Perform weighted randomized selection out of the 4 pools
-    pub fn select_winning_pool(ctx: Context<SelectWinningPool>, pool_names: Vec<u8>, pool_predictions: Vec<f64>, pool_coin_price: Vec<f64>) -> Result<String> {
+    pub fn select_winning_pool(ctx: Context<SelectWinningPool>, pool_names: Vec<u8>, pool_predictions: Vec<f64>, pool_coin_prices: Vec<f64>) -> Result<String> {
         // check to see if the parameters are correct
         require!(pool_names.len() == pool_predictions.len(), ErrorCode::PoolsDataSizeDoNotMatch);
-        require!(pool_predictions.len() == pool_coin_price.len(), ErrorCode::PoolsDataSizeDoNotMatch);
+        require!(pool_predictions.len() == pool_coin_prices.len(), ErrorCode::PoolsDataSizeDoNotMatch);
         require!(Pools::Solana.to_code() == pool_names[0], ErrorCode::PoolsInWrongOrder);
         require!(Pools::BNB.to_code() == pool_names[1], ErrorCode::PoolsInWrongOrder);
         require!(Pools::Polygon.to_code() == pool_names[2], ErrorCode::PoolsInWrongOrder);
@@ -142,7 +142,7 @@ pub mod coin_war {
         let mut winning_index = 0;
         let mut current_smallest_delta = 100000.000;
         for i in 0..pool_predictions.len() {
-            let delta = (pool_predictions[i] - pool_coin_price[i]).abs();
+            let delta = (pool_predictions[i] - pool_coin_prices[i]).abs();
             if delta < current_smallest_delta {
                 current_smallest_delta = delta;
                 winning_index = i;
