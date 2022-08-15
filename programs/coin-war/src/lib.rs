@@ -368,7 +368,7 @@ pub struct Withdraw<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(amount: f64, pool_name: String, prediction: f64)]
+#[instruction(amount: f64, pool_name: u8, prediction: f64)]
 pub struct Deposit<'info> {
     #[account(mut)]
     pub initializer: Signer<'info>,
@@ -380,7 +380,7 @@ pub struct Deposit<'info> {
         constraint=user_token_account.mint == mint_address.key(),
     )]
     pub user_token_account: Account<'info, TokenAccount>,
-    #[account(mut, seeds = [pool_name.as_ref()], bump)]
+    #[account(mut, seeds = [&[pool_name]], bump)]
     pub pool: Account<'info, Pool>,
     #[account(
         mut,
@@ -424,13 +424,13 @@ pub struct PayWinner<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(pool_name: String, prediction: f64)]
+#[instruction(pool_name: u8, prediction: f64)]
 pub struct MakePrediction<'info> {
     #[account(mut)]
     pub owner: Signer<'info>,
     #[account(mut, seeds = [b"user".as_ref(), owner.key().as_ref()], bump)]
     pub user: Account<'info, User>,
-    #[account(mut, seeds = [pool_name.as_ref()], bump)]
+    #[account(mut, seeds = [&[pool_name]], bump)]
     pub pool: Account<'info, Pool>,
 }
 
@@ -467,12 +467,12 @@ pub struct CreateUser<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(pool_name: String)]
+#[instruction(pool_name: u8)]
 pub struct CreatePool<'info> {
     // TODO: add constraint = owner.key() == OWNER
     #[account(mut)]
     pub owner: Signer<'info>,
-    #[account(init, payer = owner, space = Pool::LEN, seeds = [pool_name.as_ref()], bump)]
+    #[account(init, payer = owner, space = Pool::LEN, seeds = [&[pool_name]], bump)]
     pub pool: Account<'info, Pool>,
     #[account(
         init,
